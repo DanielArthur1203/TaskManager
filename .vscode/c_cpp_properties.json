@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/builds/Qt-6.11.1-mingw_64-x86_64/Debug/TaskManager_autogen/include",
+                "${workspaceFolder}/builds/Qt-6.11.1-mingw_64-x86_64/Debug/_deps/googletest-src/googletest/include",
+                "C:/Qt/6.11.1/mingw_64/include",
+                "C:/Qt/6.11.1/mingw_64/include/QtWidgets",
+                "C:/Qt/6.11.1/mingw_64/include/QtCore",
+                "C:/Qt/6.11.1/mingw_64/include/QtGui",
+                "C:/Qt/6.11.1/mingw_64/mkspecs/win32-g++"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.26100.0",
+            "compilerPath": "C:/Qt/Tools/mingw1310_64/bin/g++.exe",
+            "cStandard": "c17",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}

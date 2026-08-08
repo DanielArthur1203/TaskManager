@@ -1,0 +1,18 @@
+add_library(taskmanager_general STATIC
+    processes.cpp
+)
+
+target_include_directories(taskmanager_general
+    PUBLIC
+        ${PROJECT_SOURCE_DIR}/general
+)
+
+target_compile_features(taskmanager_general PUBLIC cxx_std_23)
+
+if(WIN32)
+    target_compile_definitions(taskmanager_general
+        PUBLIC
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX
+    )
+endif()

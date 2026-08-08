@@ -1,0 +1,27 @@
+# gui/CMakeLists.txt
+qt_add_executable(TaskManager
+    mainwindow.cpp
+    mainwindow.h
+    mainwindow.ui
+)
+
+target_link_libraries(TaskManager
+    PRIVATE
+        taskmanager_core
+        Qt${QT_VERSION_MAJOR}::Widgets
+)
+
+target_compile_features(TaskManager PUBLIC cxx_std_23)
+
+set_target_properties(TaskManager PROPERTIES
+    MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+    MACOSX_BUNDLE TRUE
+    WIN32_EXECUTABLE TRUE
+)
+
+install(TARGETS TaskManager
+    BUNDLE DESTINATION .
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
