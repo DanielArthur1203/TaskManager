@@ -11,7 +11,10 @@ class MemoryInfo{
     public:
         MemoryInfo(){processes = Processes();};
 
-        std::unique_ptr<SIZE_T> getPhysicalMemoryUsage(const DWORD pid);
+        //Returns working set size of one process in MB
+        SIZE_T getPhysicalMemoryUsage(const DWORD pid);
+        //Returns working set size of all non PPL and PP-L processes in MB
+        SIZE_T getTotalPhysicalMemoryUsage();
 };
 
 #endif

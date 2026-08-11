@@ -2,13 +2,13 @@
 #include <windows.h>
 #include <intsafe.h>
 #include <stdexcept>
-#include <algorithm>
 
-std::unique_ptr<std::vector<PROCESSENTRY32>> Processes::getAllActiveProcesses() noexcept(false){
-    auto processes = std::make_unique<std::vector<PROCESSENTRY32>>();
+std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses() noexcept(false){
+    std::vector<PROCESSENTRY32> processes = std::vector<PROCESSENTRY32>();
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
     if(handleSnap == INVALID_HANDLE_VALUE){
+        CloseHandle(handleSnap);
         throw std::runtime_error(formattedError("Process Snapshot"));
     }
 
@@ -16,24 +16,26 @@ std::unique_ptr<std::vector<PROCESSENTRY32>> Processes::getAllActiveProcesses() 
     p32.dwSize = sizeof(PROCESSENTRY32);
 
     if(!Process32First(handleSnap, &p32)){
+        CloseHandle(handleSnap);
         throw std::runtime_error(formattedError("Process Reading"));
     }
 
-    processes->push_back(p32);
+    processes.push_back(p32);
 
     while(Process32Next(handleSnap, &p32)){
-        processes->push_back(p32);
+        processes.push_back(p32);
     }
 
     CloseHandle(handleSnap);
     return processes;
 }
 
-std::unique_ptr<std::vector<DWORD>> Processes::getPIDFromName(const std::wstring &name) noexcept(false){
-    auto pids = std::make_unique<std::vector<DWORD>>();
+std::vector<DWORD> Processes::getPIDFromName(const std::wstring &name) noexcept(false){
+    std::vector<DWORD> pids = std::vector<DWORD>();
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
     if(handleSnap == INVALID_HANDLE_VALUE){
+        CloseHandle(handleSnap);
         throw std::runtime_error(formattedError("Process Snapshot"));
     }
 
@@ -43,11 +45,12 @@ std::unique_ptr<std::vector<DWORD>> Processes::getPIDFromName(const std::wstring
     if(Process32FirstW(handleSnap, &p32)){
         do{
             if(name == p32.szExeFile){
-                pids->push_back(p32.th32ProcessID);
+                pids.push_back(p32.th32ProcessID);
             }
         } while(Process32NextW(handleSnap, &p32));
     }
     else{
+        CloseHandle(handleSnap);
         throw std::runtime_error(formattedError("Process Reading"));
     }
 
@@ -55,11 +58,12 @@ std::unique_ptr<std::vector<DWORD>> Processes::getPIDFromName(const std::wstring
     return pids;
 }
 
-std::unique_ptr<std::wstring> Processes::getNameFromPID(const DWORD pid) noexcept(false){
-    auto exeName = std::make_unique<std::wstring>(L"");
+std::wstring Processes::getNameFromPID(const DWORD pid) noexcept(false){
+    std::wstring exeName = std::wstring(L"");
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
     if(handleSnap == INVALID_HANDLE_VALUE){
+        CloseHandle(handleSnap);
         throw std::runtime_error(formattedError("Process Snapshot"));
     }
 
@@ -69,46 +73,18 @@ std::unique_ptr<std::wstring> Processes::getNameFromPID(const DWORD pid) noexcep
     if(Process32FirstW(handleSnap, &p32)){
         do{
             if(pid == p32.th32ProcessID){
-                exeName->append(p32.szExeFile);
+                exeName.append(p32.szExeFile);
                 break;
             }
         } while(Process32NextW(handleSnap, &p32));
     }
     else{
+        CloseHandle(handleSnap);
         throw std::runtime_error(formattedError("Process Reading"));
     }
 
     CloseHandle(handleSnap);
     return exeName;
-}
-
-std::unique_ptr<std::wstring> Processes::getParentNameFromChildPID(const DWORD pid) noexcept(false){
-    auto parentName = std::make_unique<std::wstring>(L"");
-    HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    DWORD parentPid;
-
-    if(handleSnap == INVALID_HANDLE_VALUE){
-        throw std::runtime_error(formattedError("Process Snapshot"));
-    }
-
-    PROCESSENTRY32W p32;
-    p32.dwSize = sizeof(PROCESSENTRY32W);
-
-    if(Process32FirstW(handleSnap, &p32)){
-        do{
-            if(pid == p32.th32ProcessID){
-                parentPid = p32.th32ParentProcessID;
-                break;
-            }
-        } while(Process32NextW(handleSnap, &p32));
-    }
-    else{
-        throw std::runtime_error(formattedError("Process Reading"));
-    }
-
-    parentName->append(*getNameFromPID(parentPid));
-    CloseHandle(handleSnap);
-    return parentName;
 }
 
 std::string Processes::formattedError(std::string msg) noexcept{
