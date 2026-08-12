@@ -1,6 +1,7 @@
 #include "processes.hpp"
 #include <windows.h>
 #include <intsafe.h>
+#include <pdhmsg.h>
 #include <stdexcept>
 
 std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses() noexcept(false){
@@ -116,4 +117,50 @@ std::string Processes::formattedError(std::string msg) noexcept{
     }
 
     return response;
+}
+
+std::string Processes::formattedError(std::string msg, bool PDHError) noexcept{
+    // Try to format an error message using the PDH module. PDH functions
+    // return PDH_STATUS codes rather than Win32 GetLastError(), but callers
+    // of this overload currently call it when they expect PDH-related errors
+    // so we attempt to format using the last error code if available.
+    HMODULE hPdhLibrary = LoadLibraryA("pdh.dll");
+    if(hPdhLibrary == NULL){
+        DWORD loadErr = GetLastError();
+        return msg + " failed (couldn't load pdh.dll), error " + std::to_string(loadErr);
+    }
+
+    DWORD dwErrorCode = GetLastError();
+    LPWSTR pMessage = NULL;
+
+    if(!FormatMessageW(FORMAT_MESSAGE_FROM_HMODULE |
+                    FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                    FORMAT_MESSAGE_IGNORE_INSERTS,
+                    hPdhLibrary,
+                    dwErrorCode,
+                    0,
+                    (LPWSTR)&pMessage,
+                    0,
+                    NULL))
+    {
+        FreeLibrary(hPdhLibrary);
+        return msg + " failed with error number " + std::to_string(dwErrorCode);
+    }
+
+    // Convert wide string to UTF-8 std::string
+    std::string text;
+    int len = WideCharToMultiByte(CP_UTF8, 0, pMessage, -1, NULL, 0, NULL, NULL);
+    if(len > 0){
+        text.resize(len - 1);
+        WideCharToMultiByte(CP_UTF8, 0, pMessage, -1, &text[0], len, NULL, NULL);
+    }
+
+    LocalFree(pMessage);
+    FreeLibrary(hPdhLibrary);
+
+    if(text.empty()){
+        return msg + " failed with error number " + std::to_string(dwErrorCode);
+    }
+
+    return msg + " failed: " + text;
 }

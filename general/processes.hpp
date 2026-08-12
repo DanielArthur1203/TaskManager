@@ -15,6 +15,7 @@ class Processes{
         std::vector<DWORD> getPIDFromName(const std::wstring& name) noexcept(false);
         std::wstring getNameFromPID(const DWORD pid) noexcept(false);
         std::string formattedError(std::string msg) noexcept;
+        std::string formattedError(std::string msg, bool PDHError) noexcept;
 };
 
 #endif
