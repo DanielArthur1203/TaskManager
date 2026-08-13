@@ -57,3 +57,31 @@ TEST(MemoryInfo, getPagedPool){
     EXPECT_NO_THROW(a.getPagedPool());
     EXPECT_TRUE(a.getPagedPool() > 0);
 }
+
+TEST(MemoryInfo, getNonPagedPool){
+    MemoryInfo a;
+
+    EXPECT_NO_THROW(a.getNonPagedPool());
+    EXPECT_TRUE(a.getNonPagedPool() > 0);
+}
+
+TEST(MemoryInfo, getMemorySpeed){
+    MemoryInfo a;
+
+    EXPECT_NO_THROW(a.getMemorySpeed());
+    EXPECT_TRUE(a.getMemorySpeed() > 0);
+}
+
+TEST(MemoryInfo, getNumUsedRAMSlots){
+    MemoryInfo a;
+
+    EXPECT_NO_THROW(a.getNumUsedRAMSlots());
+    EXPECT_TRUE(a.getNumUsedRAMSlots() > 0);
+}
+
+TEST(MemoryInfo, getTotalRAMSlots){
+    MemoryInfo a;
+
+    EXPECT_NO_THROW(a.getTotalRAMSlots());
+    EXPECT_TRUE(a.getTotalRAMSlots() > 0);
+}

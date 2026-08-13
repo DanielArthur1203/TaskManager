@@ -23,7 +23,17 @@ class MemoryInfo{
         double getSystemCommitLimit();
         //Returns current system commit usage in GiB
         double getCurrentCommitUsage();
+        //Returns current paged pool in MiB
         unsigned long getPagedPool();
+        //Returns non paged pool in MiB
+        unsigned long getNonPagedPool();
+        //Returns configured memory clock speed in MT/s
+        unsigned long getMemorySpeed();
+        //Returns number of used RAM slots
+        unsigned short getNumUsedRAMSlots();
+        //Returns total number of RAM slots
+        unsigned short getTotalRAMSlots();
+
 };
 
 #endif

@@ -4,6 +4,9 @@
 #include <tlhelp32.h>
 #include <pdh.h>
 #include <sysinfoapi.h>
+#include <comdef.h>
+#include <wbemidl.h>
+#include <oleauto.h>
 #include <vector>
 #include <stdexcept>
 #include <cmath>
@@ -171,4 +174,252 @@ unsigned long MemoryInfo::getPagedPool(){
         throw std::runtime_error(processes.formattedError("Getting Performance Info"));
     }
     return pagedPool;
+}
+
+unsigned long MemoryInfo::getNonPagedPool(){
+    unsigned long nonPagedPool = 0;
+    PERFORMANCE_INFORMATION pInfo = PERFORMANCE_INFORMATION();
+    pInfo.cb = sizeof(PERFORMANCE_INFORMATION);
+
+    if(GetPerformanceInfo(&pInfo, sizeof(pInfo))){
+        nonPagedPool = (pInfo.KernelNonpaged * pInfo.PageSize) / (1024 * 1024); //b to mb
+    }
+    else{
+        throw std::runtime_error(processes.formattedError("Getting Performance Info"));
+    }
+    return nonPagedPool;
+}
+
+unsigned long MemoryInfo::getMemorySpeed(){
+    unsigned long memorySpeed = 0;
+
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if(hres != 0){
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator, NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (void**)&pLoc
+    );
+    if (hres != 0 || pLoc == NULL) {
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    // Use SysAllocString instead of _bstr_t for MinGW compatibility
+    BSTR bstrNamespace = SysAllocString(L"ROOT\\CIMV2");
+    IWbemServices* pSvc = NULL;
+    hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
+    SysFreeString(bstrNamespace);
+    
+    if (hres != 0 || pSvc == NULL) {
+        pLoc->Release();
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    BSTR bstrLanguage = SysAllocString(L"WQL");
+    BSTR bstrQuery = SysAllocString(L"SELECT Speed, ConfiguredClockSpeed FROM Win32_PhysicalMemory");
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(bstrLanguage, bstrQuery, 
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+    SysFreeString(bstrLanguage);
+    SysFreeString(bstrQuery);
+
+    if (SUCCEEDED(hres) && pEnumerator != NULL) {
+        IWbemClassObject* pclsObj = NULL;
+        ULONG uReturn = 0;
+        
+        if (SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn)) && uReturn > 0) {
+            VARIANT vtProp;
+            VariantInit(&vtProp);
+            if (SUCCEEDED(pclsObj->Get(L"ConfiguredClockSpeed", 0, &vtProp, NULL, NULL))) {
+                if (vtProp.vt == VT_I4) {
+                    memorySpeed = vtProp.lVal;
+                }
+                VariantClear(&vtProp);
+            }
+            pclsObj->Release();
+        }
+        else{
+            pEnumerator->Release();
+            pSvc->Release();
+            pLoc->Release();
+            CoUninitialize();
+            throw std::runtime_error("Failed with HRESULT code " + hres);
+        }
+        pEnumerator->Release();
+    }else{
+        pSvc->Release();
+        pLoc->Release();
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    pSvc->Release();
+    pLoc->Release();
+    CoUninitialize();
+    return memorySpeed;
+}
+
+unsigned short MemoryInfo::getNumUsedRAMSlots(){
+    unsigned short usedSlots = 0;
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if(hres != 0){
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator, NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (void**)&pLoc
+    );
+
+    BSTR bstrNamespace = SysAllocString(L"ROOT\\CIMV2");
+    IWbemServices* pSvc = NULL;
+    hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
+    SysFreeString(bstrNamespace);
+    
+    if (hres != 0 || pSvc == NULL) {
+        pLoc->Release();
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    BSTR bstrLanguage = SysAllocString(L"WQL");
+    BSTR bstrQuery = SysAllocString(L"SELECT * FROM Win32_PhysicalMemory");
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(bstrLanguage, bstrQuery, 
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+    SysFreeString(bstrLanguage);
+    SysFreeString(bstrQuery);
+    
+    IWbemClassObject* pclsObj = NULL;
+    ULONG uReturn = 0;
+
+    while (pEnumerator) {
+        hres = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+        if (0 == uReturn) {
+            break;
+        }
+        
+        usedSlots++;
+        pclsObj->Release();
+    }
+
+    pEnumerator->Release();
+    pSvc->Release();
+    pLoc->Release();
+    CoUninitialize();
+
+    return usedSlots;
+}
+
+unsigned short MemoryInfo::getTotalRAMSlots(){
+    unsigned short totalSlots = 0;
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if(hres != 0){
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator, NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (void**)&pLoc
+    );
+
+    BSTR bstrNamespace = SysAllocString(L"ROOT\\CIMV2");
+    IWbemServices* pSvc = NULL;
+    hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
+    SysFreeString(bstrNamespace);
+    
+    if (hres != 0 || pSvc == NULL) {
+        pLoc->Release();
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    BSTR bstrLanguage = SysAllocString(L"WQL");
+    BSTR bstrQuery = SysAllocString(L"SELECT MemoryDevices FROM Win32_PhysicalMemoryArray");
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(bstrLanguage, bstrQuery, 
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+    SysFreeString(bstrLanguage);
+    SysFreeString(bstrQuery);
+    
+    if (SUCCEEDED(hres) && pEnumerator != NULL) {
+        IWbemClassObject* pclsObj = NULL;
+        ULONG uReturn = 0;
+        
+        if (SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn)) && uReturn > 0) {
+            VARIANT vtProp;
+            VariantInit(&vtProp);
+            if (SUCCEEDED(pclsObj->Get(L"MemoryDevices", 0, &vtProp, NULL, NULL))) {
+                if (vtProp.vt == VT_I4) {
+                    totalSlots = vtProp.lVal;
+                }
+                VariantClear(&vtProp);
+            }
+            pclsObj->Release();
+        }
+        else{
+            pEnumerator->Release();
+            pSvc->Release();
+            pLoc->Release();
+            CoUninitialize();
+            throw std::runtime_error("Enumeration failed");
+        }
+        pEnumerator->Release();
+    }else{
+        pSvc->Release();
+        pLoc->Release();
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
+
+    pSvc->Release();
+    pLoc->Release();
+    CoUninitialize();
+
+    return totalSlots;
 }
