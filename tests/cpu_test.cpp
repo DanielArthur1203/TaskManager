@@ -16,3 +16,24 @@ TEST(Cpu, cpuClockSpeed){
     EXPECT_NO_THROW(a.cpuClockSpeed());
     EXPECT_TRUE(a.cpuClockSpeed() > 0);
 }
+
+TEST(Cpu, processorCount){
+    Cpu a;
+
+    EXPECT_NO_THROW(a.processorCount());
+    EXPECT_TRUE(a.processorCount() > 0);
+}
+
+TEST(Cpu, threadCount){
+    Cpu a;
+
+    EXPECT_NO_THROW(a.threadCount());
+    EXPECT_TRUE(a.threadCount() > 0);
+}
+
+TEST(Cpu, handleCount){
+    Cpu a;
+
+    EXPECT_NO_THROW(a.handleCount());
+    EXPECT_TRUE(a.handleCount() > 0);
+}

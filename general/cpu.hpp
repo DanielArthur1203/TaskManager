@@ -21,6 +21,13 @@ class Cpu{
         double currentUsage();
         //Returns CPU clock speed in GHz by multiplying the usage ratio by the base speed
         double cpuClockSpeed();
+        //Returns number of logical processors
+        unsigned int processorCount();
+        //Returns the number of CPU threads 
+        unsigned int threadCount();
+        //Returns number of handles that do not belong to PPL or PP-L processes
+        //Sadly makes the return extremely off 
+        unsigned int handleCount();
 };
 
 #endif

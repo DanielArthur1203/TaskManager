@@ -5,6 +5,7 @@
 #include <chrono>
 #include <thread>
 #include <cmath>
+#include <numeric>
 
 typedef struct _PROCESSOR_POWER_INFORMATION {
     ULONG Number;
@@ -115,4 +116,65 @@ double Cpu::cpuClockSpeed(){
     PdhRemoveCounter(phC);
     PdhCloseQuery(phQ);
     return speed;
+}
+
+unsigned int Cpu::processorCount(){
+    unsigned int count = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+    if(count == 0){
+        throw std::runtime_error(processes.formattedError("Retrieving Active Processors"));
+    }
+    return count;
+}
+
+unsigned int Cpu::threadCount(){
+    unsigned int threads = 0;
+    std::vector<PROCESSENTRY32> activeP = std::vector<PROCESSENTRY32>();
+
+    try{
+        activeP = processes.getAllActiveProcesses();
+    }
+    catch(const std::runtime_error& e){
+        throw std::runtime_error(e.what());
+    }
+
+    threads = std::accumulate(activeP.begin(), activeP.end(), 0,
+        [](int sum, const PROCESSENTRY32& p32){
+            return sum + p32.cntThreads;
+    });
+
+    return threads;
+}
+
+unsigned int Cpu::handleCount(){
+    unsigned int count = 0;
+    std::vector<PROCESSENTRY32> activeP = std::vector<PROCESSENTRY32>();
+
+    try{
+        activeP = processes.getAllActiveProcesses();
+    }
+    catch(const std::runtime_error& e){
+        throw std::runtime_error(e.what());
+    }
+
+    for(auto it = activeP.begin(); it != activeP.end(); ++it){
+        DWORD pid = it->th32ProcessID;
+
+        HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+
+        if(handle != NULL){
+            DWORD hCount = 0; 
+            if(GetProcessHandleCount(handle, &hCount)){
+                count += hCount;
+            }
+            else{
+                CloseHandle(handle);
+                throw std::runtime_error("Getting Handle Count For " + pid);
+            }
+            CloseHandle(handle);
+        }
+        else{
+            continue;
+        }
+    }
+    return count;
 }
