@@ -4,6 +4,8 @@
 #include "processes.hpp"
 #include <windows.h>
 #include <vector>
+#include <string>
+#include <array>
 
 class Cpu{
     private:
@@ -12,6 +14,8 @@ class Cpu{
         unsigned long long fileTimeToULL(const FILETIME& ft);
         //Helper that returns CPU base speed
         double getBaseSpeed();
+        //Helper that returns vector of structs holder processor information
+        std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> getProcessorInfo();
     public:
         Cpu(){
             processes = Processes();
@@ -28,6 +32,14 @@ class Cpu{
         //Returns number of handles that do not belong to PPL or PP-L processes
         //Sadly makes the return extremely off 
         unsigned int handleCount();
+        //Returns CPU uptime in d:h:m:s format
+        std::string upTime();
+        //Returns an array holding the sizes of L1, L2, L30 caches
+        std::array<double, 3> cacheAmounts();
+        //Returns # of CPU cores
+        unsigned short coreCount();
+        //Inclined to believe that this works but since I have HyperV on it will always return false
+        //bool virtualizationState();
 };
 
 #endif

@@ -2,6 +2,9 @@
 #include <sysinfoapi.h>
 #include <powrprof.h>
 #include <pdh.h>
+#include <comdef.h>
+#include <wbemidl.h>
+#include <oleauto.h>
 #include <chrono>
 #include <thread>
 #include <cmath>
@@ -34,6 +37,23 @@ double Cpu::getBaseSpeed(){
         throw std::runtime_error("Opening Registry Key Failed");
     }
     return static_cast<double>(mhz) / 1000.0;
+}
+
+std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> Cpu::getProcessorInfo(){
+    DWORD buffer = 0;
+    
+    //Meant to fail
+    if((GetLogicalProcessorInformation(nullptr, &buffer))){
+        throw std::runtime_error(processes.formattedError("Getting Buffer Size"));
+    }
+
+    std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> infoVec(buffer / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
+
+    if(!(GetLogicalProcessorInformation(infoVec.data(), &buffer))){
+        throw std::runtime_error(processes.formattedError("Getting Logical Processor Info"));
+    }
+
+    return infoVec;
 }
 
 double Cpu::currentUsage()
@@ -178,3 +198,165 @@ unsigned int Cpu::handleCount(){
     }
     return count;
 }
+
+std::string Cpu::upTime(){
+    std::string upTime = "";
+
+    ULONGLONG ticks = GetTickCount64();
+    ULONGLONG sec = ticks / 1000;
+    ULONGLONG days = sec / (24 * 3600);
+    sec %= (24 * 3600);
+    ULONGLONG hours = sec / 3600;
+    sec %= 3600;
+    ULONGLONG min = sec / 60;
+    sec %= 60;
+
+    upTime.append(std::to_string(static_cast<int>(days)));
+    upTime += ":";
+    upTime.append(std::to_string(static_cast<int>(hours)));
+    upTime += ":";
+    upTime.append(std::to_string(static_cast<int>(min)));;
+    upTime += ":";
+    upTime.append(std::to_string(static_cast<int>(sec)));;
+    return upTime;
+}
+
+std::array<double, 3> Cpu::cacheAmounts(){
+    auto caches = std::array<double, 3>();
+    double L1 = 0;
+    double L2 = 0;
+    double L3 = 0;
+    std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> pInfo;
+
+    try{
+        pInfo = getProcessorInfo();
+    }
+    catch(const std::runtime_error& e){
+        throw std::runtime_error(e.what());
+    }
+
+    for(const auto& info: pInfo){
+        if(info.Relationship == RelationCache){
+            const CACHE_DESCRIPTOR& cache = info.Cache;
+            
+            switch(cache.Level){
+                case 1:
+                    //L1 is usually in KiB
+                    L1 += (cache.Size / 1024.0);
+                    break;
+                case 2:
+                    //L2 and L3 is usually in MiB
+                    L2 += (cache.Size / (1024.0 * 1024.0));
+                    break;
+                case 3:
+                    L3 += (cache.Size / (1024.0 * 1024.0));
+                    break;
+            }
+        }
+    }
+    caches[0] = L1;
+    caches[1] = L2;
+    caches[2] = L3;
+    return caches;
+}
+
+unsigned short Cpu::coreCount(){
+    unsigned short count = 0;
+    std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> pInfo;
+
+    try{
+        pInfo = getProcessorInfo();
+    }
+    catch(const std::runtime_error& e){
+        throw std::runtime_error(e.what());
+    }
+
+    for(const auto& info: pInfo){
+        if(info.Relationship == RelationProcessorCore){
+            count++;
+        }
+    }
+    return count;
+}
+
+// bool Cpu::virtualizationState(){
+//     bool isEnabled = false;
+//     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+//     if(hres != 0){
+//         throw std::runtime_error("Failed with HRESULT code " + hres);
+//     }
+
+//     hres = CoInitializeSecurity(
+//         NULL, -1, NULL, NULL,
+//         RPC_C_AUTHN_LEVEL_DEFAULT,
+//         RPC_C_IMP_LEVEL_IMPERSONATE,
+//         NULL, EOAC_NONE, NULL
+//     );
+
+//     IWbemLocator* pLoc = NULL;
+//     hres = CoCreateInstance(
+//         CLSID_WbemLocator, NULL,
+//         CLSCTX_INPROC_SERVER,
+//         IID_IWbemLocator, (void**)&pLoc
+//     );
+//     if (hres != 0 || pLoc == NULL) {
+//         CoUninitialize();
+//         throw std::runtime_error("Failed with HRESULT code " + hres);
+//     }
+
+//     // Use SysAllocString instead of _bstr_t for MinGW compatibility
+//     BSTR bstrNamespace = SysAllocString(L"ROOT\\CIMV2");
+//     IWbemServices* pSvc = NULL;
+//     hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
+//     SysFreeString(bstrNamespace);
+    
+//     if (hres != 0 || pSvc == NULL) {
+//         pLoc->Release();
+//         CoUninitialize();
+//         throw std::runtime_error("Failed with HRESULT code " + hres);
+//     }
+
+//     BSTR bstrLanguage = SysAllocString(L"WQL");
+//     BSTR bstrQuery = SysAllocString(L"SELECT VirtualizationFirmwareEnabled FROM Win32_Processor");
+//     IEnumWbemClassObject* pEnumerator = NULL;
+//     hres = pSvc->ExecQuery(bstrLanguage, bstrQuery, 
+//         WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+//     SysFreeString(bstrLanguage);
+//     SysFreeString(bstrQuery);
+
+//     if (SUCCEEDED(hres) && pEnumerator != NULL) {
+//         IWbemClassObject* pclsObj = NULL;
+//         ULONG uReturn = 0;
+        
+//         if (SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn))) {
+//             VARIANT vtProp;
+//             VariantInit(&vtProp);
+//             if (SUCCEEDED(pclsObj->Get(L"VirtualizationFirmwareEnabled", 0, &vtProp, NULL, NULL))) {
+//                 if (vtProp.vt == VT_BOOL) {
+//                     isEnabled = (vtProp.boolVal != VARIANT_FALSE);
+//                 }
+//                 VariantClear(&vtProp);
+//             }
+//             pclsObj->Release();
+//         }
+//         else{
+//             pEnumerator->Release();
+//             pSvc->Release();
+//             pLoc->Release();
+//             CoUninitialize();
+//             throw std::runtime_error("Failed with HRESULT code " + hres);
+//         }
+//         pEnumerator->Release();
+//     }else{
+//         pSvc->Release();
+//         pLoc->Release();
+//         CoUninitialize();
+//         throw std::runtime_error("Failed with HRESULT code " + hres);
+//     }
+
+//     pSvc->Release();
+//     pLoc->Release();
+//     CoUninitialize();
+
+//     return isEnabled;
+// }
