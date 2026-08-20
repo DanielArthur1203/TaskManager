@@ -2,6 +2,7 @@ add_library(taskmanager_general STATIC
     processes.cpp
     memory.cpp
     cpu.cpp
+    disk.cpp
 )
 
 target_include_directories(taskmanager_general

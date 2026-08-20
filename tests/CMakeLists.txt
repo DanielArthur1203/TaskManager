@@ -13,6 +13,7 @@ add_executable(taskmanager_tests
     processes_test.cpp
     memory_test.cpp
     cpu_test.cpp
+    disk_test.cpp
 )
 
 target_include_directories(taskmanager_tests
