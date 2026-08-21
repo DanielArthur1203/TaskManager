@@ -1,5 +1,6 @@
 #include "disk.hpp"
 #include <windows.h>
+#include <winioctl.h>
 #include <psapi.h>
 #include <tlhelp32.h>
 #include <pdh.h>
@@ -11,7 +12,21 @@
 #include <chrono>
 #include <thread>
 
-std::vector<std::wstring> Disk::diskNames(){
+LPCSTR Disk::wstrToLPCSTR(std::wstring &string){
+    int size = WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), NULL, 0, NULL, NULL);
+
+    static thread_local std::string str;
+    str.assign(size, '\0');
+
+    if (size > 0) {
+        WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), str.data(), size, NULL, NULL);
+    }
+
+    return str.c_str();
+}
+
+std::vector<std::wstring> Disk::diskNames()
+{
     std::vector<std::wstring> names;
 
     DWORD count = GetLogicalDriveStringsW(0, NULL);
@@ -116,32 +131,132 @@ std::unordered_map<std::wstring, unsigned int> Disk::activeTime()
     return map;
 }
 
-double Disk::readSpeed(){
-    double speed = 0;
-    HQUERY q;
-    HCOUNTER hc;
+std::unordered_map<std::wstring, double> Disk::readSpeed(){
+    std::unordered_map<std::wstring, double> speed;
+    std::vector<std::wstring> names = diskNames();
 
-    if(PdhOpenQuery(NULL, 0, &q) != ERROR_SUCCESS){
-        throw std::runtime_error(processes.formattedError("Opening Query", true));
+    for(auto it = names.begin(); it != names.end(); ++it){
+        it->erase(2); //Each name is formatted as L"C:\\"
+        std::wstring path = L"\\\\.\\" + *it;
+
+        HANDLE h = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, 
+            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+            0, NULL);
+        
+        if(h == INVALID_HANDLE_VALUE){
+            throw std::runtime_error(processes.formattedError("Create File Handle"));
+        }
+
+        DISK_PERFORMANCE p = DISK_PERFORMANCE{};
+        DWORD bytesRet = 0;
+
+        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
+        }
+
+        unsigned long long b1 = p.BytesRead.QuadPart;
+
+        auto start = std::chrono::steady_clock::now();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        p = DISK_PERFORMANCE{};
+        bytesRet = 0;
+
+        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
+        }
+
+        unsigned long long b2 = p.BytesRead.QuadPart;
+        auto end = std::chrono::steady_clock::now();
+
+        std::chrono::duration<double> sec = end - start;
+        double rate = static_cast<double>((b2 - b1)) / (sec.count());
+        speed.insert({*it, rate});
+        CloseHandle(h);
     }
 
-    if(PdhAddCounter(q, "\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &hc) != ERROR_SUCCESS){
-        PdhCloseQuery(q);
-        throw std::runtime_error(processes.formattedError("Adding Counter", true));
-    }
-
-    PdhCollectQueryData(q);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    PdhCollectQueryData(q);
-
-    PDH_FMT_COUNTERVALUE ph = PDH_FMT_COUNTERVALUE{};
-    if(PdhGetFormattedCounterValue(hc, PDH_FMT_DOUBLE, NULL, &ph) != ERROR_SUCCESS){
-        PdhCloseQuery(q);
-        throw std::runtime_error(processes.formattedError("Getting Formatted Counter", true));
-    }
-
-    speed = ph.doubleValue;
-
-    PdhCloseQuery(q);
     return speed;
+}
+
+std::unordered_map<std::wstring, double> Disk::writeSpeed(){
+    std::unordered_map<std::wstring, double> speed;
+    std::vector<std::wstring> names = diskNames();
+
+    for(auto it = names.begin(); it != names.end(); ++it){
+        it->erase(2); //Each name is formatted as L"C:\\"
+        std::wstring path = L"\\\\.\\" + *it;
+
+        HANDLE h = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, 
+            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+            0, NULL);
+        
+        if(h == INVALID_HANDLE_VALUE){
+            throw std::runtime_error(processes.formattedError("Create File Handle"));
+        }
+
+        DISK_PERFORMANCE p = DISK_PERFORMANCE{};
+        DWORD bytesRet = 0;
+
+        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
+        }
+
+        unsigned long long b1 = p.BytesWritten.QuadPart;
+
+        auto start = std::chrono::steady_clock::now();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        p = DISK_PERFORMANCE{};
+        bytesRet = 0;
+
+        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
+        }
+
+        unsigned long long b2 = p.BytesWritten.QuadPart;
+        auto end = std::chrono::steady_clock::now();
+
+        std::chrono::duration<double> sec = end - start;
+        double rate = static_cast<double>((b2 - b1)) / (sec.count());
+        speed.insert({*it, rate});
+        CloseHandle(h);
+    }
+
+    return speed;
+}
+
+std::unordered_map<std::wstring, double> Disk::responseTime(){
+    std::unordered_map<std::wstring, double> rTime;
+    std::vector<std::wstring> names = diskNames();
+
+    for(auto it = names.begin(); it != names.end(); ++it){
+        PDH_HQUERY ph;
+        PDH_HCOUNTER hc;
+        PDH_FMT_COUNTERVALUE val;
+
+        it->erase(2); //Each name is formatted as L"C:\\"
+        if(PdhOpenQuery(NULL, 0, &ph) != ERROR_SUCCESS){
+            throw std::runtime_error(processes.formattedError("Opening Query For Disk", true));
+        }
+
+        std::wstring path = L"\\PhysicalDisk(0 " + *it + L")\\Avg. Disk sec/Transfer";
+        LPCSTR ex = wstrToLPCSTR(path);
+        if(PdhAddCounter(ph, wstrToLPCSTR(path), 0, &hc) != ERROR_SUCCESS){
+            PdhCloseQuery(ph);
+            throw std::runtime_error(processes.formattedError("Adding Counter For Disk Rsp. Time", true));
+        }
+
+        PdhCollectQueryData(ph);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        PdhCollectQueryData(ph);
+
+        if(PdhGetFormattedCounterValue(hc, PDH_FMT_DOUBLE, NULL, &val) != ERROR_SUCCESS){
+            PdhCloseQuery(ph);
+            throw std::runtime_error(processes.formattedError("Getting Disk Rsp. Counter Value", true));
+        }
+
+        rTime.insert({*it, val.doubleValue * 1000.0});
+        PdhCloseQuery(ph);
+    }
+    return rTime;
 }
