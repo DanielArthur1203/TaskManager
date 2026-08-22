@@ -45,8 +45,33 @@ std::vector<std::wstring> Disk::diskNames()
     return names;
 }
 
-std::unordered_map<std::wstring, unsigned int> Disk::activeTime()
-{
+int Disk::diskNumberFromName(std::wstring &name){
+    int num = 0;
+    std::wstring path = L"\\\\.\\" + name.erase(2); 
+    
+    HANDLE h = CreateFileW(path.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+        OPEN_EXISTING, 0, NULL);
+    
+    if(h == INVALID_HANDLE_VALUE){
+        throw std::runtime_error(processes.formattedError("Creating File For Disk Number"));
+    }
+
+    VOLUME_DISK_EXTENTS vol = VOLUME_DISK_EXTENTS{};
+    DWORD bytes = 0;
+
+    if(!(DeviceIoControl(h, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0,
+        &vol, sizeof(vol), &bytes, NULL))){
+        
+        CloseHandle(h);
+        throw std::runtime_error(processes.formattedError("Getting Volume Disk For Disk Number"));
+    }
+
+    num = vol.Extents[0].DiskNumber;
+    CloseHandle(h);
+    return num;
+}
+
+std::unordered_map<std::wstring, unsigned int> Disk::activeTime(){
     auto map = std::unordered_map<std::wstring, unsigned int>();
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
     if(hres != 0){
@@ -133,8 +158,7 @@ std::unordered_map<std::wstring, unsigned int> Disk::activeTime()
 
 std::unordered_map<std::wstring, double> Disk::readSpeed(){
     std::unordered_map<std::wstring, double> speed;
-    std::vector<std::wstring> names = diskNames();
-
+    
     for(auto it = names.begin(); it != names.end(); ++it){
         it->erase(2); //Each name is formatted as L"C:\\"
         std::wstring path = L"\\\\.\\" + *it;
@@ -151,6 +175,7 @@ std::unordered_map<std::wstring, double> Disk::readSpeed(){
         DWORD bytesRet = 0;
 
         if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            CloseHandle(h);
             throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
         }
 
@@ -163,6 +188,7 @@ std::unordered_map<std::wstring, double> Disk::readSpeed(){
         bytesRet = 0;
 
         if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            CloseHandle(h);
             throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
         }
 
@@ -180,8 +206,7 @@ std::unordered_map<std::wstring, double> Disk::readSpeed(){
 
 std::unordered_map<std::wstring, double> Disk::writeSpeed(){
     std::unordered_map<std::wstring, double> speed;
-    std::vector<std::wstring> names = diskNames();
-
+    
     for(auto it = names.begin(); it != names.end(); ++it){
         it->erase(2); //Each name is formatted as L"C:\\"
         std::wstring path = L"\\\\.\\" + *it;
@@ -198,6 +223,7 @@ std::unordered_map<std::wstring, double> Disk::writeSpeed(){
         DWORD bytesRet = 0;
 
         if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            CloseHandle(h);
             throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
         }
 
@@ -210,6 +236,7 @@ std::unordered_map<std::wstring, double> Disk::writeSpeed(){
         bytesRet = 0;
 
         if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+            CloseHandle(h);
             throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
         }
 
@@ -227,7 +254,7 @@ std::unordered_map<std::wstring, double> Disk::writeSpeed(){
 
 std::unordered_map<std::wstring, double> Disk::responseTime(){
     std::unordered_map<std::wstring, double> rTime;
-    std::vector<std::wstring> names = diskNames();
+    
 
     for(auto it = names.begin(); it != names.end(); ++it){
         PDH_HQUERY ph;
@@ -259,4 +286,32 @@ std::unordered_map<std::wstring, double> Disk::responseTime(){
         PdhCloseQuery(ph);
     }
     return rTime;
+}
+
+std::unordered_map<std::wstring, unsigned int> Disk::capacity(){
+    std::unordered_map<std::wstring, unsigned int> capacity;
+    
+
+    for(auto it = names.begin(); it != names.end(); ++it){
+        ULARGE_INTEGER total;
+
+        if(!(GetDiskFreeSpaceExW(it->c_str(), NULL, &total, NULL))){
+            throw std::runtime_error(processes.formattedError("Getting Free Disk Space"));
+        }
+
+        unsigned int GiB = total.QuadPart / (1024 * 1024 * 1024);
+        capacity.insert({it->erase(2), GiB});
+    }
+
+    return capacity;
+}
+
+std::unordered_map<std::wstring, int> Disk::type(){
+    std::unordered_map<std::wstring, int> type;
+
+    for(auto it = names.begin(); it != names.end(); ++it){
+        unsigned int a = GetDriveTypeA(wstrToLPCSTR(*it));
+        type.insert({it->erase(2), a});
+    }
+    return type;
 }
