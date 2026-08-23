@@ -25,8 +25,7 @@ LPCSTR Disk::wstrToLPCSTR(std::wstring &string){
     return str.c_str();
 }
 
-std::vector<std::wstring> Disk::diskNames()
-{
+std::vector<std::wstring> Disk::diskNames(){
     std::vector<std::wstring> names;
 
     DWORD count = GetLogicalDriveStringsW(0, NULL);
