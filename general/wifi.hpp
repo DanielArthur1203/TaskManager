@@ -20,6 +20,11 @@ class WiFi{
         std::unordered_map<unsigned long, double> sendRate();
         //Returns a map where each adapter index is matched with its current receive rate in bytes per sec
         std::unordered_map<unsigned long, double> receiveRate();
+        /* Returns the SSID of whatever WLAN device shows up first in WLAN_INTERFACE_INFO_LIST
+            Not sure how to match this with a adapter index
+        */
+        std::wstring SSID();
+        std::unordered_map<unsigned long, std::string> connectionType();
 };
 
 #endif

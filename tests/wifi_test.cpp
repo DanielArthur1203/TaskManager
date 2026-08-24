@@ -14,7 +14,12 @@ TEST(WiFi, sendRate){
     EXPECT_TRUE(wifi.sendRate().size() != 0);
 }
 
-TEST(wiFi, receiveRate){
+TEST(WiFi, receiveRate){
     EXPECT_NO_THROW(wifi.receiveRate());
     EXPECT_TRUE(wifi.receiveRate().size() != 0);
+}
+
+TEST(WiFi, SSID){
+    ASSERT_EXIT((wifi.SSID(), std::exit(0)), ::testing::ExitedWithCode(0), ".*");
+    EXPECT_TRUE(wifi.SSID().size() != 0);
 }
