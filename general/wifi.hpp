@@ -1,6 +1,7 @@
 #ifndef WIFI_HPP
 #define WIFI_HPP
 
+#include "wifi_compat.hpp"
 #include "processes.hpp"
 #include <vector>
 #include <unordered_map>
@@ -9,6 +10,7 @@ class WiFi{
     private:
         Processes processes;
         std::vector<unsigned long> adapterIndices;
+        std::string phyToString(DOT11_PHY_TYPE& phy) noexcept;
     public:
         WiFi(){
             processes = Processes();
@@ -24,7 +26,12 @@ class WiFi{
             Not sure how to match this with a adapter index
         */
         std::wstring SSID();
+        //Returns a map where each adapter index is matched with its connection type(i.e 802.11ac for WiFi 5)
         std::unordered_map<unsigned long, std::string> connectionType();
+        //Returns a map where each adapter index is matched with its IPv4 address
+        std::unordered_map<unsigned long, std::string> ipV4Address();
+        //Returns a map where each adapter index is matched with its IPv6 address
+        std::unordered_map<unsigned long, std::wstring> ipV6Address();
 };
 
 #endif
