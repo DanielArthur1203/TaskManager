@@ -3,6 +3,7 @@
 
 #include "processes.hpp"
 #include <unordered_map>
+#include <cstdint>
 
 class GPU{
     private: 
@@ -26,9 +27,11 @@ class GPU{
         Inaccurate(off by 500MB for me) since the VRAM value is what the OS determines is the cap for optimal performance
 
         Tried to find a way to get the accurate amount and was going to have a stroke since 
-        DXGI_ADAPTER_DESC1 values are either way to small to be accurate or 0
+        DXGI_ADAPTER_DESC1 values are either way to small to be accurate or 0 for integrated graphics
         */
         std::unordered_map<uint64_t, double> VRAM();
+        //Returns a map where each LUID is matched to its shared VRAM total
+        std::unordered_map<uint64_t, double> sharedVRAM();
 };
 
 

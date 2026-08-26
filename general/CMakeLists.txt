@@ -14,7 +14,7 @@ target_include_directories(taskmanager_general
 
 target_compile_features(taskmanager_general PUBLIC cxx_std_23)
 target_link_libraries(taskmanager_general PRIVATE pdh wbemuuid ole32 oleaut32 PowrProf
-    iphlpapi ws2_32 wlanapi dxgi)
+    iphlpapi ws2_32 wlanapi dxgi ntdll)
 
 if(WIN32)
     target_compile_definitions(taskmanager_general

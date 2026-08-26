@@ -1,6 +1,7 @@
 #include "processes.hpp"
 #include "cpu.hpp"
 #include <gtest/gtest.h>
+#include <vector>
 
 Cpu a;
 
@@ -8,6 +9,15 @@ TEST(Cpu, currentUsage){
     EXPECT_NO_THROW(a.currentUsage());
     ASSERT_TRUE(a.currentUsage() >= 0);
     EXPECT_TRUE(a.currentUsage() > 0);
+}
+
+TEST(Cpu, processUsage){
+    Processes b;
+    std::wstring bad = L"Code.exe";
+    std::vector<DWORD> pids = b.getPIDFromName(bad);
+    
+    EXPECT_NO_THROW(a.processUsage(pids.at(0)));
+    EXPECT_TRUE(a.processUsage(pids.at(0)) >= 0);
 }
 
 TEST(Cpu, cpuClockSpeed){

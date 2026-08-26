@@ -17,3 +17,8 @@ TEST(GPU, VRAM){
     EXPECT_NO_THROW(gpu.VRAM());
     EXPECT_TRUE(gpu.VRAM().size() != 0);
 }
+
+TEST(GPU, sharedVRAM){
+    EXPECT_NO_THROW(gpu.sharedVRAM());
+    EXPECT_TRUE(gpu.sharedVRAM().size() != 0);
+}

@@ -1,4 +1,6 @@
 #include "cpu.hpp"
+#include <windows.h>
+#include <winternl.h>
 #include <sysinfoapi.h>
 #include <powrprof.h>
 #include <pdh.h>
@@ -9,6 +11,8 @@
 #include <thread>
 #include <cmath>
 #include <numeric>
+
+using namespace std::chrono;
 
 typedef struct _PROCESSOR_POWER_INFORMATION {
     ULONG Number;
@@ -56,14 +60,47 @@ std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> Cpu::getProcessorInfo(){
     return infoVec;
 }
 
-double Cpu::currentUsage()
-{
+double Cpu::getUsageByTime(HANDLE h, unsigned long long &lastK, unsigned long long &lastU, unsigned long long &lastS){
+    double usage = 0;
+    FILETIME create, exit, kernel, user, system;
+    SYSTEM_TIMEOFDAY_INFORMATION dayInfo;
+
+    if(!(GetProcessTimes(h, &create, &exit, &kernel, &user))){
+        CloseHandle(h);
+        throw std::runtime_error(processes.formattedError("Getting Process Times"));
+    }
+
+    GetSystemTimeAsFileTime(&system);
+
+    ULARGE_INTEGER kInt, uInt, sysInt;
+    kInt.LowPart = kernel.dwLowDateTime;
+    kInt.HighPart = kernel.dwHighDateTime;
+    uInt.LowPart = user.dwLowDateTime;
+    uInt.HighPart = user.dwHighDateTime;
+    sysInt.LowPart = system.dwLowDateTime;
+    sysInt.HighPart = system.dwHighDateTime;
+
+    unsigned long long procTimeDiff = (kInt.QuadPart - lastK) + (uInt.QuadPart - lastU);
+    unsigned long long sysTimeDiff = sysInt.QuadPart - lastS;
+
+    lastK = kInt.QuadPart;
+    lastU = uInt.QuadPart;
+    lastS = sysInt.QuadPart;
+
+    if(sysTimeDiff == 0){
+        return 0;
+    }
+    usage = static_cast<double>((procTimeDiff * 100) / sysTimeDiff);
+    return usage;
+}
+
+double Cpu::currentUsage(){
     FILETIME idle, kernel, user;
 
     if(!GetSystemTimes(&idle, &kernel, &user)){
         throw std::runtime_error(processes.formattedError("Getting System Times"));
     }
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(seconds(1));
 
     FILETIME idle2, kernel2, user2;
 
@@ -89,6 +126,28 @@ double Cpu::currentUsage()
     return returnUsage;
 }
 
+double Cpu::processUsage(DWORD pid){
+    double usage = 0;
+
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+    if(h == NULL){
+        throw std::runtime_error(processes.formattedError("Opening Process " + pid));
+    }
+
+    unsigned long long lastK = 0, lastU = 0, lastS = 0;
+
+    getUsageByTime(h, lastK, lastU, lastS);
+
+    std::this_thread::sleep_for(milliseconds(500));
+
+    usage = getUsageByTime(h, lastK, lastU, lastS);
+
+    usage /= processorCount();
+
+    CloseHandle(h);
+    return usage;
+}
+
 double Cpu::cpuClockSpeed(){
     double speed = 0;
     double baseSpeed = getBaseSpeed();
@@ -112,7 +171,7 @@ double Cpu::cpuClockSpeed(){
         throw std::runtime_error(processes.formattedError("Collecting Query Data", true));
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(seconds(1));
 
     if(PdhCollectQueryData(phQ) != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
