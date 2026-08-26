@@ -4,7 +4,7 @@
 #include <pdhmsg.h>
 #include <stdexcept>
 
-std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses() noexcept(false){
+std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses(){
     std::vector<PROCESSENTRY32> processes = std::vector<PROCESSENTRY32>();
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
@@ -31,7 +31,7 @@ std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses() noexcept(false){
     return processes;
 }
 
-std::vector<DWORD> Processes::getPIDFromName(const std::wstring &name) noexcept(false){
+std::vector<DWORD> Processes::getPIDFromName(const std::wstring &name){
     std::vector<DWORD> pids = std::vector<DWORD>();
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
@@ -59,7 +59,7 @@ std::vector<DWORD> Processes::getPIDFromName(const std::wstring &name) noexcept(
     return pids;
 }
 
-std::wstring Processes::getNameFromPID(const DWORD pid) noexcept(false){
+std::wstring Processes::getNameFromPID(const DWORD pid){
     std::wstring exeName = std::wstring(L"");
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 

@@ -163,3 +163,38 @@ std::unordered_map<uint64_t, double> GPU::VRAM(){
     }
     return vram;
 }
+
+std::unordered_map<uint64_t, double> GPU::sharedVRAM(){
+    std::unordered_map<uint64_t, double> shared;
+    
+    for(int i = 0; i < luids.size(); i++){
+        ComPtr<IDXGIFactory4> fac;
+        HRESULT res = CreateDXGIFactory1(IID_PPV_ARGS(&fac));
+
+        if(FAILED(res)){
+            throw std::runtime_error("DXGI Factory Creation Failed With DXGI Error " + res);
+        }
+
+        ComPtr<IDXGIAdapter> adapt;
+        res = fac->EnumAdapterByLuid(luids.at(i), IID_PPV_ARGS(&adapt));
+
+        if(FAILED(res)){
+            throw std::runtime_error("Adapter Enumeration Failed With DXGI Error " + res);
+        }
+
+        DXGI_ADAPTER_DESC desc;
+        res = adapt->GetDesc(&desc);
+
+        if(FAILED(res)){
+            throw std::runtime_error("Video Mem Query Failed WIth DXGI Error " + res);
+        }
+
+        double bytes = static_cast<double>(desc.SharedSystemMemory);
+        bytes /= (1024 * 1024 * 1024);
+        bytes = std::round(bytes * 10) / 10;
+
+        shared.insert({ids.at(i), bytes});
+    }
+    return shared;
+}
+

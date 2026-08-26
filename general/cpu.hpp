@@ -10,12 +10,14 @@
 class Cpu{
     private:
         Processes processes;
+
         //Helper that converts FILETIME fields to unsigned long long
         unsigned long long fileTimeToULL(const FILETIME& ft);
         //Helper that returns CPU base speed
         double getBaseSpeed();
         //Helper that returns vector of structs holder processor information
         std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> getProcessorInfo();
+        double getUsageByTime(HANDLE h, unsigned long long& lastK, unsigned long long& lastU, unsigned long long& lastS);
     public:
         Cpu(){
             processes = Processes();
@@ -23,6 +25,8 @@ class Cpu{
 
         //Returns percent CPU usage
         double currentUsage();
+        //IDK if this is accurate this is really annoying
+        double processUsage(DWORD pid);
         //Returns CPU clock speed in GHz by multiplying the usage ratio by the base speed
         double cpuClockSpeed();
         //Returns number of logical processors
