@@ -20,6 +20,15 @@ TEST(Cpu, processUsage){
     EXPECT_TRUE(a.processUsage(pids.at(0)) >= 0);
 }
 
+TEST(Cpu, processNameTotalUsage){
+    Processes b;
+    std::wstring bad = L"Code.exe";
+    std::vector<DWORD> pids = b.getPIDFromName(bad);
+
+    EXPECT_NO_THROW(a.processNameTotalUsage(pids.at(0)));
+    EXPECT_TRUE(a.processNameTotalUsage(pids.at(0)) > 0);
+}
+
 TEST(Cpu, cpuClockSpeed){
     EXPECT_NO_THROW(a.cpuClockSpeed());
     EXPECT_TRUE(a.cpuClockSpeed() > 0);

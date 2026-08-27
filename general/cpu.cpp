@@ -11,6 +11,8 @@
 #include <thread>
 #include <cmath>
 #include <numeric>
+#include <future>
+#include <list>
 
 using namespace std::chrono;
 
@@ -60,37 +62,23 @@ std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> Cpu::getProcessorInfo(){
     return infoVec;
 }
 
-double Cpu::getUsageByTime(HANDLE h, unsigned long long &lastK, unsigned long long &lastU, unsigned long long &lastS){
-    double usage = 0;
-    FILETIME create, exit, kernel, user, system;
-    SYSTEM_TIMEOFDAY_INFORMATION dayInfo;
+unsigned long long Cpu::getSnap(DWORD pid){
+    unsigned long long usage = 0;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+    
+    if(h == NULL){
+        throw std::runtime_error(processes.formattedError("Opening Process " + pid));
+    }
 
-    if(!(GetProcessTimes(h, &create, &exit, &kernel, &user))){
+    FILETIME creation, exit, kernel, user;
+
+    if(!(GetProcessTimes(h, &creation, &exit, &kernel, &user))){
         CloseHandle(h);
-        throw std::runtime_error(processes.formattedError("Getting Process Times"));
+        throw std::runtime_error(processes.formattedError("Getting Process Times For Process " + pid));
     }
 
-    GetSystemTimeAsFileTime(&system);
-
-    ULARGE_INTEGER kInt, uInt, sysInt;
-    kInt.LowPart = kernel.dwLowDateTime;
-    kInt.HighPart = kernel.dwHighDateTime;
-    uInt.LowPart = user.dwLowDateTime;
-    uInt.HighPart = user.dwHighDateTime;
-    sysInt.LowPart = system.dwLowDateTime;
-    sysInt.HighPart = system.dwHighDateTime;
-
-    unsigned long long procTimeDiff = (kInt.QuadPart - lastK) + (uInt.QuadPart - lastU);
-    unsigned long long sysTimeDiff = sysInt.QuadPart - lastS;
-
-    lastK = kInt.QuadPart;
-    lastU = uInt.QuadPart;
-    lastS = sysInt.QuadPart;
-
-    if(sysTimeDiff == 0){
-        return 0;
-    }
-    usage = static_cast<double>((procTimeDiff * 100) / sysTimeDiff);
+    usage += fileTimeToULL(kernel) + fileTimeToULL(user);
+    CloseHandle(h);
     return usage;
 }
 
@@ -128,23 +116,65 @@ double Cpu::currentUsage(){
 
 double Cpu::processUsage(DWORD pid){
     double usage = 0;
+    
+    unsigned long long snap1 = 0;
 
-    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
-    if(h == NULL){
-        throw std::runtime_error(processes.formattedError("Opening Process " + pid));
+    try{
+        snap1 = getSnap(pid);
+    }
+    catch(std::runtime_error& e){
+        throw std::runtime_error(e.what());
     }
 
-    unsigned long long lastK = 0, lastU = 0, lastS = 0;
+    ULONGLONG time1 = GetTickCount64();
 
-    getUsageByTime(h, lastK, lastU, lastS);
+    std::this_thread::sleep_for(seconds(1));
 
-    std::this_thread::sleep_for(milliseconds(500));
+    unsigned long long snap2 = 0;
 
-    usage = getUsageByTime(h, lastK, lastU, lastS);
+    try{
+        snap2 = getSnap(pid);
+    }
+    catch(std::runtime_error& e){
+        throw std::runtime_error(e.what());
+    }
 
+    ULONGLONG time2 = GetTickCount64();
+
+    ULONGLONG tDelta = time2 - time1;
+
+    auto snapDelta = snap2 - snap1;
+
+    usage = static_cast<double>((snapDelta / (tDelta * 10000.0)));
     usage /= processorCount();
+    usage *= 100;
+    usage = std::round(usage * 100) / 100;
+    return usage;
+}
 
-    CloseHandle(h);
+double Cpu::processNameTotalUsage(DWORD pid){
+    double usage = 0;
+
+    std::wstring singleName = processes.getNameFromPID(pid);
+    std::vector<DWORD> allPIDS = processes.getPIDFromName(singleName);
+    std::list<std::future<double>> results;
+
+    for(auto it = allPIDS.begin(); it != allPIDS.end(); ++it){
+        try{
+            DWORD id = *it;
+            results.push_back(std::async(std::launch::async, [this, id](){
+                return processUsage(id);
+            }));
+        } 
+        catch(std::runtime_error& e){
+            throw std::runtime_error(e.what());
+        }
+    }
+
+    for(auto it = results.begin(); it != results.end(); ++it){
+        usage += it->get();
+    }
+    usage = std::round(usage * 10) / 10;
     return usage;
 }
 

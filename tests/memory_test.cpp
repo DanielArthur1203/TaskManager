@@ -12,6 +12,15 @@ TEST(MemoryInfo, getPhysicalMemoryUsage){
     EXPECT_NE(a.getPhysicalMemoryUsage(pid), 0);
 }
 
+TEST(MemoryInfo, getNamePhysicalMemoryUsage){
+    MemoryInfo a;
+    Processes b;
+    DWORD pid = b.getPIDFromName(L"Code.exe").at(0);
+
+    EXPECT_NO_THROW(a.getNamePhysicalMemoryUsage(pid));
+    EXPECT_TRUE(a.getNamePhysicalMemoryUsage(pid) > 0);
+}
+
 TEST(MemoryInfo, getTotalMemoryUsage){
     MemoryInfo a;
     SIZE_T mem = a.getTotalPhysicalMemoryUsage();

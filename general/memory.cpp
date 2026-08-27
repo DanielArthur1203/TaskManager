@@ -11,8 +11,24 @@
 #include <stdexcept>
 #include <cmath>
 
-SIZE_T MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
-    SIZE_T memTotal = 0;
+typedef struct _PROCESS_MEMORY_COUNTERS_EX2 {
+    DWORD   cb;
+    DWORD   PageFaultCount;
+    SIZE_T  PeakWorkingSetSize;
+    SIZE_T  WorkingSetSize;
+    SIZE_T  QuotaPeakPagedPoolUsage;
+    SIZE_T  QuotaPagedPoolUsage;
+    SIZE_T  QuotaPeakNonPagedPoolUsage;
+    SIZE_T  QuotaNonPagedPoolUsage;
+    SIZE_T  PagefileUsage;
+    SIZE_T  PeakPagefileUsage;
+    SIZE_T  PrivateUsage;
+    SIZE_T  PrivateWorkingSetSize;
+    ULONG64 SharedCommitUsage;
+} PROCESS_MEMORY_COUNTERS_EX2;
+
+double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
+    double memTotal = 0;
     HANDLE pHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
         FALSE, pid);
 
@@ -21,21 +37,39 @@ SIZE_T MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
         throw std::runtime_error(processes.formattedError("Process Handle Opening"));
     }
 
-    PROCESS_MEMORY_COUNTERS_EX pmc;
+    //Realized I could just define EX2 to bypass the weird EX2 is not defined error 
+    PROCESS_MEMORY_COUNTERS_EX2 pmc;
 
     if(GetProcessMemoryInfo(pHandle, (PPROCESS_MEMORY_COUNTERS)&pmc, sizeof(pmc))){
-        memTotal = pmc.WorkingSetSize/(1024 * 1024); //byte to megabyte conversion
+        memTotal = static_cast<double>((pmc.PrivateWorkingSetSize)/(1024.0 * 1024.0)); //byte to megabyte conversion
     }
     else{
         CloseHandle(pHandle);
         throw std::runtime_error(processes.formattedError("Memory Info Retrieval"));
     }
+    memTotal = std::round(memTotal * 100) / 100;
     CloseHandle(pHandle);
     return memTotal;
 }
 
-SIZE_T MemoryInfo::getTotalPhysicalMemoryUsage(){
-    SIZE_T totalMem = 0;
+double MemoryInfo::getNamePhysicalMemoryUsage(const DWORD pid){
+    double usage = 0;
+    std::wstring singleName = processes.getNameFromPID(pid);
+    std::vector<DWORD> allPIDS = processes.getPIDFromName(singleName);
+    //Just remembered that for-each loops exist. I'm a moron
+    for(auto& pid: allPIDS){
+        try{
+            usage += getPhysicalMemoryUsage(pid);
+        }
+        catch(const std::runtime_error& e){
+            throw std::runtime_error(e.what());
+        }
+    }
+    return usage;
+}
+
+double MemoryInfo::getTotalPhysicalMemoryUsage(){
+    double totalMem = 0;
     std::vector<PROCESSENTRY32> activeProcesses;
 
     try{
@@ -61,15 +95,15 @@ SIZE_T MemoryInfo::getTotalPhysicalMemoryUsage(){
     return totalMem;
 }
 
-unsigned int MemoryInfo::getPercentageMemoryUsage(){
-    unsigned int percentage = 0; 
+double MemoryInfo::getPercentageMemoryUsage(){
+    double percentage = 0; 
     ULONGLONG totalMem = 0;
 
     if(!GetPhysicallyInstalledSystemMemory(&totalMem)){
         throw std::runtime_error(processes.formattedError("Physical System Memory Retrieval"));
     }
 
-    SIZE_T currentUsage = getTotalPhysicalMemoryUsage();
+    double currentUsage = getTotalPhysicalMemoryUsage();
     totalMem /= 1024; //kb to mb
 
     double totalDouble = static_cast<double>(totalMem);

@@ -17,7 +17,8 @@ class Cpu{
         double getBaseSpeed();
         //Helper that returns vector of structs holder processor information
         std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> getProcessorInfo();
-        double getUsageByTime(HANDLE h, unsigned long long& lastK, unsigned long long& lastU, unsigned long long& lastS);
+        //Helper that returns a snapshot of a processes CPU usage by its PID
+        unsigned long long getSnap(DWORD pid);
     public:
         Cpu(){
             processes = Processes();
@@ -25,8 +26,10 @@ class Cpu{
 
         //Returns percent CPU usage
         double currentUsage();
-        //IDK if this is accurate this is really annoying
+        //Returns the CPU usage of a individual process
         double processUsage(DWORD pid);
+        //Returns the CPU usage of all processes that have the same exe name as the given PID
+        double processNameTotalUsage(DWORD pid);
         //Returns CPU clock speed in GHz by multiplying the usage ratio by the base speed
         double cpuClockSpeed();
         //Returns number of logical processors

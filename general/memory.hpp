@@ -11,12 +11,14 @@ class MemoryInfo{
     public:
         MemoryInfo(){processes = Processes();};
 
-        //Returns working set size of one process in MiB
-        SIZE_T getPhysicalMemoryUsage(const DWORD pid);
+        //Returns private working set size of one process in MiB
+        double getPhysicalMemoryUsage(const DWORD pid);
+        //Returns private working set size in MiB of all processes with the same exe name as the given PID
+        double getNamePhysicalMemoryUsage(const DWORD pid);
         //Returns working set size of all non PPL and PP-L processes in MiB
-        SIZE_T getTotalPhysicalMemoryUsage();
+        double getTotalPhysicalMemoryUsage();
         //Returns total usage of all non PPL and PP-L processes as a percentage
-        unsigned int getPercentageMemoryUsage();
+        double getPercentageMemoryUsage();
         //Returns total cached memory in MiB(takes at least 4 seconds to finish)
         unsigned long getTotalCachedMemory();
         //Returns system commit limit in GiB
