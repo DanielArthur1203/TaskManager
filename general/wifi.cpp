@@ -7,6 +7,7 @@
 #include <iphlpapi.h>
 #include <netioapi.h>
 #include <wlanapi.h>
+// #include <tcpestats.h>
 #include <memory>
 #include <thread>
 #include <chrono>
@@ -42,6 +43,44 @@ std::string WiFi::phyToString(DOT11_PHY_TYPE &phy) noexcept{
     }
     return "Unknown";
 }
+
+// void WiFi::toggleConnectionStats(MIB_TCPROW_OWNER_PID row, bool enable){
+//     TCP_BOOLEAN_OPTIONAL t;
+//     TCP_BOOLEAN_OPTIONAL f;
+
+//     auto size = sizeof(TCP_BOOLEAN_OPTIONAL);
+
+//     auto res = SetPerTcpConnectionEStats((PMIB_TCPROW)&row, TcpConnectionEstatsData,
+//         enable ? (PUCHAR)(TcpBoolOptEnabled) : (PUCHAR)(TcpBoolOptDisabled),
+//         0, 
+//         size,
+//         0);
+    
+//     if(res != NO_ERROR){
+//         throw std::runtime_error("Failed to Set TCP Connection Stats With iphlpapi code " + res);
+//     }
+// }
+
+// void WiFi::readConnectionBytes(MIB_TCPROW_OWNER_PID row, ULONG64 &bytesReceived, ULONG64 &bytesSent){
+//     bytesReceived = 0;
+//     bytesSent = 0;
+
+//     ULONG size = sizeof(TCP_ESTATS_DATA_ROD_v0);
+//     TCP_ESTATS_DATA_ROD_v0 rod = TCP_ESTATS_DATA_ROD_v0{};
+
+//     auto res = GetPerTcpConnectionEStats((PMIB_TCPROW)&row, 
+//         TcpConnectionEstatsData,
+//         NULL, 0, 0,
+//         NULL, 0, 0,
+//         (PUCHAR)&rod, 0, size);
+    
+//     if(res != NO_ERROR){
+//         throw std::runtime_error("Failed to Get TCP Connection Stats With iphlpapi code " + res);
+//     }
+
+//     bytesReceived = rod.DataBytesIn;
+//     bytesSent = rod.DataBytesOut;
+// }
 
 std::vector<unsigned long> WiFi::getAdapterIndices(){
     std::vector<unsigned long> indices;
@@ -398,3 +437,55 @@ std::unordered_map<unsigned long, std::wstring> WiFi::ipV6Address(){
     }
     return addresses;
 }
+
+// double WiFi::processInternetUsage(DWORD pid){
+//     double usage = 0;
+//     DWORD size = 0;
+
+//     GetExtendedTcpTable(NULL, &size, false, AF_INET, TCP_TABLE_OWNER_PID_CONNECTIONS, 0);
+//     std::unique_ptr<MIB_TCPTABLE_OWNER_PID, void(*)(void*)> table(
+//         static_cast<PMIB_TCPTABLE_OWNER_PID>(std::malloc(size)), 
+//         std::free);
+        
+//     if(!table){
+//         throw std::runtime_error("Memory Allocation Failed");
+//     }
+
+//     auto res = GetExtendedTcpTable(table.get(), &size, false, AF_INET, TCP_TABLE_OWNER_PID_CONNECTIONS, 0);
+
+//     if(res != NO_ERROR){
+//         throw std::runtime_error("Getting Extended TCP Table Failed With iphlpapi Code " + res);
+//     }
+
+//     for(int i = 0; i < table->dwNumEntries; i++){
+//         if(table->table[i].dwOwningPid == pid){
+//             try{
+//                 // toggleConnectionStats(table->table[i], true);
+//                 // ULONG64 received1 = 0;
+//                 // ULONG64 sent1 = 0;
+
+//                 // readConnectionBytes(table->table[i], received1, sent1);
+//                 // auto time1 = steady_clock::now();
+
+//                 // std::this_thread::sleep_for(seconds(1));
+
+//                 // ULONG64 received2 = 0;
+//                 // ULONG64 sent2 = 0;
+
+//                 // readConnectionBytes(table->table[i], received2, sent2);
+//                 // auto time2 = steady_clock::now();
+
+//                 // duration<double> timeDiff = time2 - time1;
+
+//                 // double receivedDiff = (static_cast<double>(received2 - received1)) / timeDiff.count();
+//                 // double sentDiff = (static_cast<double>(sent2 - sent1)) / timeDiff.count();
+
+//                 // usage += (receivedDiff + sentDiff) / 1e+6;
+//             }
+//             catch(const std::runtime_error& e){
+//                 throw std::runtime_error(e.what());
+//             }
+//         }
+//     }
+//     return usage;
+// }

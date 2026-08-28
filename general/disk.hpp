@@ -38,6 +38,17 @@ class Disk{
         0 -> Unknown, 1 -> No Root Dir, 2 -> Removable, 3 -> Fixed(SSD/HDD)
         4 -> Remote, 5 -> CD-ROM, 6 -> RAM disk*/
         std::unordered_map<std::wstring, int> type();
+        /*Returns the disk usage of a specific process in MiB/sec
+
+        The value returned is likely inflated in comparison to something like Task Manager
+        since I can't filter irrelevant I/O traffic without kernel level stuff
+        */
+        double processDiskUsage(DWORD pid);
+        /*Returns disk usage of all processes with the same exe name as the given process
+        
+        See the comment for processDiskUsage for inflated values
+        */
+        double allProcessNameDiskUsage(DWORD pid);
 };
 
 #endif

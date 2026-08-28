@@ -43,3 +43,21 @@ TEST(Disk, type){
     EXPECT_NO_THROW(disk.type());
     EXPECT_TRUE(disk.type().size() != 0);
 }
+
+TEST(Disk, processDiskUsage){
+    Processes b;
+    std::wstring bad = L"Code.exe";
+    std::vector<DWORD> pids = b.getPIDFromName(bad);
+
+    EXPECT_NO_THROW(disk.processDiskUsage(pids.at(0)));
+    EXPECT_TRUE(disk.processDiskUsage(pids.at(0)) >= 0);
+}
+
+TEST(Disk, allProcessNameDiskUsage){
+    Processes b;
+    std::wstring bad = L"Code.exe";
+    std::vector<DWORD> pids = b.getPIDFromName(bad);
+
+    EXPECT_NO_THROW(disk.allProcessNameDiskUsage(pids.at(0)));
+    EXPECT_TRUE(disk.allProcessNameDiskUsage(pids.at(0)) > 0);
+}

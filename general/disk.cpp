@@ -11,6 +11,11 @@
 #include <string>
 #include <chrono>
 #include <thread>
+#include <cmath>
+#include <list>
+#include <future>
+
+using namespace std::chrono;
 
 LPCSTR Disk::wstrToLPCSTR(std::wstring &string){
     int size = WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), NULL, 0, NULL, NULL);
@@ -180,8 +185,8 @@ std::unordered_map<std::wstring, double> Disk::readSpeed(){
 
         unsigned long long b1 = p.BytesRead.QuadPart;
 
-        auto start = std::chrono::steady_clock::now();
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        auto start = steady_clock::now();
+        std::this_thread::sleep_for(seconds(1));
 
         p = DISK_PERFORMANCE{};
         bytesRet = 0;
@@ -192,9 +197,9 @@ std::unordered_map<std::wstring, double> Disk::readSpeed(){
         }
 
         unsigned long long b2 = p.BytesRead.QuadPart;
-        auto end = std::chrono::steady_clock::now();
+        auto end = steady_clock::now();
 
-        std::chrono::duration<double> sec = end - start;
+        duration<double> sec = end - start;
         double rate = static_cast<double>((b2 - b1)) / (sec.count());
         speed.insert({*it, rate});
         CloseHandle(h);
@@ -228,8 +233,8 @@ std::unordered_map<std::wstring, double> Disk::writeSpeed(){
 
         unsigned long long b1 = p.BytesWritten.QuadPart;
 
-        auto start = std::chrono::steady_clock::now();
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        auto start = steady_clock::now();
+        std::this_thread::sleep_for(seconds(1));
 
         p = DISK_PERFORMANCE{};
         bytesRet = 0;
@@ -240,9 +245,9 @@ std::unordered_map<std::wstring, double> Disk::writeSpeed(){
         }
 
         unsigned long long b2 = p.BytesWritten.QuadPart;
-        auto end = std::chrono::steady_clock::now();
+        auto end = steady_clock::now();
 
-        std::chrono::duration<double> sec = end - start;
+        duration<double> sec = end - start;
         double rate = static_cast<double>((b2 - b1)) / (sec.count());
         speed.insert({*it, rate});
         CloseHandle(h);
@@ -273,7 +278,7 @@ std::unordered_map<std::wstring, double> Disk::responseTime(){
         }
 
         PdhCollectQueryData(ph);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(seconds(1));
         PdhCollectQueryData(ph);
 
         if(PdhGetFormattedCounterValue(hc, PDH_FMT_DOUBLE, NULL, &val) != ERROR_SUCCESS){
@@ -313,4 +318,75 @@ std::unordered_map<std::wstring, int> Disk::type(){
         type.insert({it->erase(2), a});
     }
     return type;
+}
+
+double Disk::processDiskUsage(DWORD pid){
+    double usage = 0;
+    double readUsage = 0;
+    double writeUsage = 0;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+
+    if(h == NULL){
+        throw std::runtime_error(processes.formattedError("Opening Process " + pid));
+    }
+
+    IO_COUNTERS counters;
+    ZeroMemory(&counters, sizeof(counters));
+
+    if(!(GetProcessIoCounters(h, &counters))){
+        CloseHandle(h);
+        throw std::runtime_error(processes.formattedError("Getting IO Counters For Process " + pid));
+    }
+
+    auto bytesRead1 = counters.ReadTransferCount;
+    auto bytesWritten1 = counters.WriteTransferCount;
+    auto time1 = steady_clock::now();
+
+    std::this_thread::sleep_for(milliseconds(500));
+
+    if(!(GetProcessIoCounters(h, &counters))){
+        CloseHandle(h);
+        throw std::runtime_error(processes.formattedError("Getting IO Counters For Process " + pid));
+    }
+
+    auto bytesRead2 = counters.ReadTransferCount;
+    auto bytesWritten2 = counters.WriteTransferCount;
+    auto time2 = steady_clock::now();
+    duration<double> diff = time2 - time1;
+
+    readUsage = (static_cast<double>((bytesRead2 - bytesRead1)) / (diff.count()));
+    writeUsage = (static_cast<double>(bytesWritten2 - bytesWritten1) / (diff.count()));
+
+    usage = readUsage + writeUsage;
+    usage /= (1024 * 1024);
+    usage = std::round(usage * 10) / 10;
+
+    CloseHandle(h);
+    return usage;
+}
+
+double Disk::allProcessNameDiskUsage(DWORD pid){
+    double usage = 0;
+
+    std::wstring singleName = processes.getNameFromPID(pid);
+    std::vector<DWORD> allPIDS = processes.getPIDFromName(singleName);
+    std::list<std::future<double>> results;
+
+    for(const auto& pid: allPIDS){
+        try{
+            DWORD id = pid;
+            results.push_back(std::async(std::launch::async, [this, id](){
+                return processDiskUsage(id);
+            }));
+        }
+        catch(const std::runtime_error& e){
+            throw std::runtime_error(e.what());
+        }
+    }
+
+    for(auto& result: results){
+        usage += result.get();
+    }
+
+    return usage;
 }

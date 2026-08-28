@@ -10,7 +10,10 @@ class WiFi{
     private:
         Processes processes;
         std::vector<unsigned long> adapterIndices;
+
         std::string phyToString(DOT11_PHY_TYPE& phy) noexcept;
+        // void toggleConnectionStats(MIB_TCPROW_OWNER_PID row, bool enable);
+        // void readConnectionBytes(MIB_TCPROW_OWNER_PID row, ULONG64& bytesReceived, ULONG64& bytesSent);
     public:
         WiFi(){
             processes = Processes();
@@ -32,6 +35,7 @@ class WiFi{
         std::unordered_map<unsigned long, std::string> ipV4Address();
         //Returns a map where each adapter index is matched with its IPv6 address
         std::unordered_map<unsigned long, std::wstring> ipV6Address();
+        double processInternetUsage(DWORD pid);
 };
 
 #endif

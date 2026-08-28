@@ -4,10 +4,13 @@
 #include "processes.hpp"
 #include <memory>
 #include <windows.h>
+#include <pdh.h>
 
 class MemoryInfo{
     private:
         Processes processes;
+
+        unsigned long PDHQueryHelper(PDH_HQUERY& q, DWORD_PTR& dwP, LPCSTR path);
     public:
         MemoryInfo(){processes = Processes();};
 
@@ -19,7 +22,7 @@ class MemoryInfo{
         double getTotalPhysicalMemoryUsage();
         //Returns total usage of all non PPL and PP-L processes as a percentage
         double getPercentageMemoryUsage();
-        //Returns total cached memory in MiB(takes at least 4 seconds to finish)
+        //Returns total cached memory in MiB
         unsigned long getTotalCachedMemory();
         //Returns system commit limit in GiB
         double getSystemCommitLimit();

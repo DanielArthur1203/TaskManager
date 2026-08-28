@@ -4,6 +4,8 @@
 #include <pdhmsg.h>
 #include <stdexcept>
 
+bool Processes::closed = false;
+
 std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses(){
     std::vector<PROCESSENTRY32> processes = std::vector<PROCESSENTRY32>();
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -86,6 +88,32 @@ std::wstring Processes::getNameFromPID(const DWORD pid){
 
     CloseHandle(handleSnap);
     return exeName;
+}
+
+void Processes::closeWindowGUI(DWORD pid){
+    EnumWindows(windowsEnumProc, pid);
+
+    if(closed == true){
+        HANDLE h = OpenProcess(SYNCHRONIZE, false, pid);
+
+        if(h == NULL){
+            throw std::runtime_error(formattedError("Opening Process " + pid));
+        }
+
+        DWORD res = WaitForSingleObject(h, 5000);
+
+        if(res == WAIT_TIMEOUT){
+            h = OpenProcess(PROCESS_TERMINATE, false, pid);
+
+            if(h == NULL){
+                throw std::runtime_error(formattedError("Opening Process " + pid));
+            }
+
+            TerminateProcess(h, 1);
+        }
+        CloseHandle(h);
+        // return (res == WAIT_OBJECT_0);
+    }
 }
 
 std::string Processes::formattedError(std::string msg) noexcept{

@@ -29,3 +29,12 @@ TEST(ProcessesTest, getNameFromPID){
     std::wstring result = a.getNameFromPID(pid);
     EXPECT_EQ(bad, result);
 }
+
+TEST(ProcessesTest, closeWindowGUI){
+    Processes a;
+    std::wstring name = L"opera.exe";
+    DWORD pid = a.getPIDFromName(name).at(0);
+
+    //EXPECT_EXIT((a.closeWindowGUI(pid), std::exit(0)), ::testing::ExitedWithCode(0), ".*");
+    EXPECT_NO_THROW(a.closeWindowGUI(pid));
+}
