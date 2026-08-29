@@ -16,6 +16,7 @@ add_executable(taskmanager_tests
     disk_test.cpp
     wifi_test.cpp
     gpu_test.cpp
+    hardware_test.cpp
 )
 
 target_include_directories(taskmanager_tests

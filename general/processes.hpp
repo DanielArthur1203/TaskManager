@@ -12,7 +12,7 @@ class Processes{
         static bool closed;
         static inline BOOL windowsEnumProc(HWND hwnd, LPARAM lparam){
             DWORD pid = static_cast<DWORD>(lparam);
-            BOOL closedHere = false;
+            BOOL closedHere = true;
             DWORD windowPid = 0;
             auto res = GetWindowThreadProcessId(hwnd, &windowPid);
 
@@ -22,7 +22,7 @@ class Processes{
 
             if(windowPid == pid && GetWindow(hwnd, GW_OWNER) == NULL && IsWindowVisible(hwnd)){
                 PostMessage(hwnd, WM_CLOSE, 0, 0);
-                closedHere = true;
+                closedHere = false;
                 closed = true;
             }
             return closedHere;
@@ -34,6 +34,8 @@ class Processes{
         std::vector<DWORD> getPIDFromName(const std::wstring& name);
         std::wstring getNameFromPID(const DWORD pid);
         void closeWindowGUI(DWORD pid);
+        //See comment in processes_test
+        bool closeConsoleProcess(DWORD pid);
         std::string formattedError(std::string msg) noexcept;
         std::string formattedError(std::string msg, bool PDHError) noexcept;
 };

@@ -116,6 +116,37 @@ void Processes::closeWindowGUI(DWORD pid){
     }
 }
 
+bool Processes::closeConsoleProcess(DWORD pid){
+    bool res = false;
+
+    if(!(AttachConsole(pid))){
+        throw std::runtime_error(formattedError("Attaching Console to Process " + pid));
+    }
+
+    SetConsoleCtrlHandler(NULL, true);
+
+    GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
+
+    HANDLE h = OpenProcess(SYNCHRONIZE, false, pid);
+
+    if(h == NULL){
+        throw std::runtime_error(formattedError("Opening Process " + pid));
+    }
+
+    DWORD wait = WaitForSingleObject(h, 2000);
+    if(wait == WAIT_TIMEOUT){
+        h = OpenProcess(PROCESS_TERMINATE, false, pid);
+        TerminateProcess(h, 1);
+        CloseHandle(h);
+    }
+
+    res = true;
+    CloseHandle(h);
+    SetConsoleCtrlHandler(NULL, false);
+    FreeConsole();
+    return res;
+}
+
 std::string Processes::formattedError(std::string msg) noexcept{
     std::string response = "";
     DWORD errorNum;
