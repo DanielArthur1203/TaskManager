@@ -94,3 +94,10 @@ TEST(MemoryInfo, getTotalRAMSlots){
     EXPECT_NO_THROW(a.getTotalRAMSlots());
     EXPECT_TRUE(a.getTotalRAMSlots() > 0);
 }
+
+TEST(MemoryInfo, getRAMType){
+    MemoryInfo a;
+
+    EXPECT_NO_THROW(a.getRAMType());
+    EXPECT_FALSE(a.getRAMType().empty());
+}

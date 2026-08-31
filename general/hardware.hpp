@@ -2,15 +2,20 @@
 #define HARDWARE_HPP
 
 #include <string>
+#include <list>
 
 class Hardware{
     private:
 
     public:
         //Returns a string containing the installed CPU name
-        std::string cpuName();
-        //To get memory name I have to use WMI in The Chronicles Of Riddick where he CoInitializeEx, CoInitializeSecurity,
-        //and CoCreateInstance a million times
+        std::string cpuName() noexcept;
+        //Returns a string containing installed memory name
+        std::wstring memoryName();
+        //Returns a linked list of strings with all disk names
+        std::list<std::wstring> diskManufacturerName();
+        //Returns a linked list of strings with active internet adapter names
+        std::list<std::wstring> internetAdapterNames();
 };
 
 #endif

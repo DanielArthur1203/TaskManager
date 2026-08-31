@@ -3,6 +3,7 @@
 
 #include "processes.hpp"
 #include <memory>
+#include <string>
 #include <windows.h>
 #include <pdh.h>
 
@@ -38,6 +39,8 @@ class MemoryInfo{
         unsigned short getNumUsedRAMSlots();
         //Returns total number of RAM slots
         unsigned short getTotalRAMSlots();
+        //Returns the installed RAM type
+        std::string getRAMType();
 
 };
 

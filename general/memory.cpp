@@ -7,6 +7,7 @@
 #include <comdef.h>
 #include <wbemidl.h>
 #include <oleauto.h>
+#include <comutil.h>
 #include <vector>
 #include <stdexcept>
 #include <cmath>
@@ -479,4 +480,83 @@ unsigned short MemoryInfo::getTotalRAMSlots(){
     CoUninitialize();
 
     return totalSlots;
+}
+
+std::string MemoryInfo::getRAMType(){
+    std::string type = "";
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+
+    if(FAILED(hres)){
+        throw std::runtime_error("CoInitializeEx Failed For Getting RAM Type");
+    }
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator, NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (LPVOID*)&pLoc
+    );
+    
+    IWbemServices* pSvc = NULL;
+    BSTR bstrNamespace = SysAllocString(L"ROOT\\CIMV2");
+    hres = pLoc->ConnectServer(
+        bstrNamespace,
+        NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc
+    );
+
+    hres = CoSetProxyBlanket(
+        pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE,
+        NULL, RPC_C_AUTHN_LEVEL_CALL,
+        RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE
+    );
+    IEnumWbemClassObject* pEnumerator = NULL;
+    BSTR bstrLanguage = SysAllocString(L"WQL");
+    BSTR bstrQuery = SysAllocString(L"SELECT SMBIOSMemoryType FROM Win32_PhysicalMemory");
+    hres = pSvc->ExecQuery(
+        bstrLanguage,
+        bstrQuery,
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+        NULL, &pEnumerator
+    );
+
+    if (SUCCEEDED(hres)) {
+        IWbemClassObject* pclsObj = NULL;
+        ULONG uReturn = 0;
+        while (pEnumerator) {
+            pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+            if (0 == uReturn) break;
+
+            VARIANT vtProp;
+            VariantInit(&vtProp);
+            pclsObj->Get(L"SMBIOSMemoryType", 0, &vtProp, 0, 0);
+            
+            switch(vtProp.lVal){
+                case 24:
+                    type = "DDR3";
+                    break;
+                case 26:
+                    type = "DDR4";
+                    break;
+                case 30:
+                    type = "DDR5";
+                    break;
+                default:
+                    type = "Unknown";
+                    break;
+            }
+            VariantClear(&vtProp);
+            pclsObj->Release();
+        }
+    }
+    pSvc->Release();
+    pLoc->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+    return type;
 }
