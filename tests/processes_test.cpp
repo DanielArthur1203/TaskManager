@@ -38,6 +38,16 @@ TEST(ProcessesTest, closeWindowGUI){
     EXPECT_EXIT((a.closeWindowGUI(pid), std::exit(0)), ::testing::ExitedWithCode(0), ".*");
     //EXPECT_NO_THROW(a.closeWindowGUI(pid));
 }
+
+TEST(ProcessesTest, windowProcess){
+    Processes a;
+    std::wstring name = L"opera.exe";
+    DWORD pid = a.getPIDFromName(name).at(0);
+
+    EXPECT_NO_THROW(a.windowProcess(pid));
+    EXPECT_TRUE(a.windowProcess(pid));
+}
+
 //I want to think that this works but every console process I can make will give ERROR_ACCESS_DENIED in AttachConsole
 // TEST(ProcessTest, closeConsoleProcess){
 //     Processes a;

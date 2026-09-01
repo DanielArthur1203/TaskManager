@@ -1,5 +1,6 @@
 #include "processes.hpp"
 #include <windows.h>
+#include <shellapi.h>
 #include <intsafe.h>
 #include <pdhmsg.h>
 #include <stdexcept>
@@ -147,6 +148,45 @@ bool Processes::closeConsoleProcess(DWORD pid){
     return res;
 }
 
+bool Processes::windowProcess(DWORD pid){
+    bool answer = true;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+    if(h == NULL){
+        throw std::runtime_error(formattedError("Opening Process " + pid));
+    }
+
+    std::wstring exeName(MAX_PATH, 0);
+    DWORD size = MAX_PATH;
+
+    if(!QueryFullProcessImageNameW(h, 0, exeName.data(), &size)){
+        CloseHandle(h);
+        throw std::runtime_error(formattedError("Querying Process Name For " + pid));
+    }
+    SHFILEINFOW s = SHFILEINFOW{};
+    
+    auto type = SHGetFileInfoW(exeName.data(), 0, &s, sizeof(s), SHGFI_EXETYPE);
+
+    if(type == 0){
+        answer = false;
+        return answer;
+    }
+
+    WORD low = LOWORD(type);
+    WORD high = HIWORD(type);
+
+    if(low == IMAGE_NT_SIGNATURE || low == IMAGE_DOS_SIGNATURE){
+        if(high == 0){
+            answer = false;
+            return answer;
+        }
+        else{
+            answer = true;
+        }
+    }
+    CloseHandle(h);
+    return answer;
+}
+
 std::string Processes::formattedError(std::string msg) noexcept{
     std::string response = "";
     DWORD errorNum;
@@ -179,10 +219,6 @@ std::string Processes::formattedError(std::string msg) noexcept{
 }
 
 std::string Processes::formattedError(std::string msg, bool PDHError) noexcept{
-    // Try to format an error message using the PDH module. PDH functions
-    // return PDH_STATUS codes rather than Win32 GetLastError(), but callers
-    // of this overload currently call it when they expect PDH-related errors
-    // so we attempt to format using the last error code if available.
     HMODULE hPdhLibrary = LoadLibraryA("pdh.dll");
     if(hPdhLibrary == NULL){
         DWORD loadErr = GetLastError();

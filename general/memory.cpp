@@ -412,13 +412,6 @@ unsigned short MemoryInfo::getTotalRAMSlots(){
         NULL, EOAC_NONE, NULL
     );
 
-    hres = CoInitializeSecurity(
-        NULL, -1, NULL, NULL,
-        RPC_C_AUTHN_LEVEL_DEFAULT,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        NULL, EOAC_NONE, NULL
-    );
-
     IWbemLocator* pLoc = NULL;
     hres = CoCreateInstance(
         CLSID_WbemLocator, NULL,
@@ -515,6 +508,7 @@ std::string MemoryInfo::getRAMType(){
         NULL, RPC_C_AUTHN_LEVEL_CALL,
         RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE
     );
+    
     IEnumWbemClassObject* pEnumerator = NULL;
     BSTR bstrLanguage = SysAllocString(L"WQL");
     BSTR bstrQuery = SysAllocString(L"SELECT SMBIOSMemoryType FROM Win32_PhysicalMemory");

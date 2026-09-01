@@ -16,6 +16,8 @@ class Hardware{
         std::list<std::wstring> diskManufacturerName();
         //Returns a linked list of strings with active internet adapter names
         std::list<std::wstring> internetAdapterNames();
+        //Returns a linked list of strings with GPU(integrated and discrete) names
+        std::list<std::wstring> gpuNames();
 };
 
 #endif

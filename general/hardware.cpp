@@ -224,3 +224,74 @@ std::list<std::wstring> Hardware::internetAdapterNames(){
     CoUninitialize();
     return names;
 }
+
+std::list<std::wstring> Hardware::gpuNames(){
+    std::list<std::wstring> names;
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+
+    if(FAILED(hres)){
+        throw std::runtime_error("CoInitializeEx Failed For Getting Memory Name");
+    }
+
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator, NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (LPVOID*)&pLoc
+    );
+
+    IWbemServices* pSvc = NULL;
+    hres = pLoc->ConnectServer(
+        _bstr_t(L"ROOT\\CIMV2"),
+        NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc
+    );
+    pLoc->Release();
+    
+    hres = CoSetProxyBlanket(
+        pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE,
+        NULL, RPC_C_AUTHN_LEVEL_CALL,
+        RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE
+    );
+
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(
+        _bstr_t(L"WQL"),
+        _bstr_t(L"SELECT AdapterCompatibility, Name FROM Win32_VideoController"),
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+        NULL, &pEnumerator
+    );
+
+    IWbemClassObject* pclsObj = NULL;
+    ULONG uReturn = 0;
+    while (pEnumerator) {
+        std::wstring fullName = L"";
+        hres = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+        if (uReturn == 0) break;
+
+        VARIANT vtProp;
+
+        pclsObj->Get(L"AdapterCompatibility", 0, &vtProp, 0, 0);
+        fullName += (vtProp.bstrVal ? vtProp.bstrVal : L"Unknown Manufacturer");
+        VariantClear(&vtProp);
+
+        fullName += L" ";
+
+        pclsObj->Get(L"Name", 0, &vtProp, 0, 0);
+        fullName  += (vtProp.bstrVal ? vtProp.bstrVal : L"Unknown Name");
+        VariantClear(&vtProp);
+        pclsObj->Release();
+
+        names.push_back(fullName);
+    }
+    pSvc->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+    return names;
+}

@@ -30,13 +30,21 @@ class Processes{
     public:
         Processes(){};
 
+        //Returns a vector of PROCESSENTRY32s for all active processes
         std::vector<PROCESSENTRY32> getAllActiveProcesses();
+        //Returns a vector of PIDs of all processes that had the same exe name as the given param
         std::vector<DWORD> getPIDFromName(const std::wstring& name);
+        //Returns the exe name of the process coressponding to the given pid
         std::wstring getNameFromPID(const DWORD pid);
+        //First attempts to signal to the GUI process to close itself and after 5 seconds the process is forcefully terminated
         void closeWindowGUI(DWORD pid);
         //See comment in processes_test
         bool closeConsoleProcess(DWORD pid);
+        //Returns true if the process is a GUI process and false otherwise
+        bool windowProcess(DWORD pid);
+        //Returns a string message of the last error returned by GetLastError
         std::string formattedError(std::string msg) noexcept;
+        //Returns a string message of the last PDH error returned by GetLastError
         std::string formattedError(std::string msg, bool PDHError) noexcept;
 };
 

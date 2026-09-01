@@ -22,3 +22,8 @@ TEST(Hardware, internetAdapterNames){
     EXPECT_NO_THROW(hardware.internetAdapterNames());
     EXPECT_FALSE(hardware.memoryName().empty());
 }
+
+TEST(Hardware, gpuNames){
+    EXPECT_NO_THROW(hardware.gpuNames());
+    EXPECT_FALSE(hardware.gpuNames().empty());
+}
