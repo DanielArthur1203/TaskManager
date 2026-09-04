@@ -184,38 +184,43 @@ double Cpu::cpuClockSpeed(){
     PDH_HQUERY phQ = nullptr;
     PDH_HCOUNTER phC = nullptr;
 
-    if(PdhOpenQuery(nullptr, 0, &phQ) != ERROR_SUCCESS){
-        throw std::runtime_error(processes.formattedError("Query Opening", true));
+    PDH_STATUS status = PdhOpenQuery(nullptr, 0, &phQ);
+    if(status != ERROR_SUCCESS){
+        throw std::runtime_error(processes.formattedError("Query Opening", status));
     }
 
     LPCWSTR counter = L"\\Processor Information(_Total)\\% Processor Performance";
 
-    if(PdhAddEnglishCounterW(phQ, counter, 0, &phC) != ERROR_SUCCESS){
+    status = PdhAddEnglishCounterW(phQ, counter, 0, &phC);
+    if(status != ERROR_SUCCESS){
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Adding English Counter", true));
+        throw std::runtime_error(processes.formattedError("Adding English Counter", status));
     }
 
-    if(PdhCollectQueryData(phQ) != ERROR_SUCCESS){
+    status = PdhCollectQueryData(phQ);
+    if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Collecting Query Data", true));
+        throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
     }
 
     std::this_thread::sleep_for(seconds(1));
 
-    if(PdhCollectQueryData(phQ) != ERROR_SUCCESS){
+    status = PdhCollectQueryData(phQ);
+    if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Collecting Query Data", true));
+        throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
     }
 
     PDH_FMT_COUNTERVALUE cValue = PDH_FMT_COUNTERVALUE();
     DWORD type;
 
-    if(PdhGetFormattedCounterValue(phC, PDH_FMT_DOUBLE, &type, &cValue) != ERROR_SUCCESS){
+    status = PdhGetFormattedCounterValue(phC, PDH_FMT_DOUBLE, &type, &cValue);
+    if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Formatting Counter Value", true));
+        throw std::runtime_error(processes.formattedError("Formatting Counter Value", status));
     }
 
     speed = cValue.doubleValue / 100.0;

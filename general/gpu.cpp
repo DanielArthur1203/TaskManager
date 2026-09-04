@@ -79,13 +79,15 @@ std::unordered_map<uint64_t, double> GPU::utilization(){
     PDH_HQUERY q = NULL;
     PDH_HCOUNTER count = NULL;
 
-    if(PdhOpenQuery(NULL, 0, &q) != ERROR_SUCCESS){
-        throw std::runtime_error(processes.formattedError("Opening Query For GPU Utilization", true));
+    PDH_STATUS status = PdhOpenQuery(NULL, 0, &q);
+    if(status != ERROR_SUCCESS){
+        throw std::runtime_error(processes.formattedError("Opening Query For GPU Utilization", status));
     }
 
-    if(PdhAddCounterW(q, L"\\GPU Engine(*)\\Utilization Percentage", 0, &count) != ERROR_SUCCESS){
+    status = PdhAddCounterW(q, L"\\GPU Engine(*)\\Utilization Percentage", 0, &count);
+    if(status != ERROR_SUCCESS){
         PdhCloseQuery(q);
-        throw std::runtime_error(processes.formattedError("Adding Counter For GPU Utilization", true));
+        throw std::runtime_error(processes.formattedError("Adding Counter For GPU Utilization", status));
     }
 
     PdhCollectQueryData(q);

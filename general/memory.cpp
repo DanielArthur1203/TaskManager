@@ -36,41 +36,46 @@ typedef struct _PROCESS_MEMORY_COUNTERS_EX2 {
 
 unsigned long MemoryInfo::PDHQueryHelper(PDH_HQUERY &q, DWORD_PTR &dwP, LPCSTR path){
     unsigned long cachedMem = 0;
-    if(PdhOpenQueryA(NULL, dwP, &q) == ERROR_SUCCESS){
+    PDH_STATUS status = PdhOpenQueryA(NULL, dwP, &q);
+    if(status == ERROR_SUCCESS){
         PDH_HCOUNTER pCounter = NULL;
 
-        if(PdhAddCounterA(q, path, dwP, &pCounter) == ERROR_SUCCESS){
-            if(PdhCollectQueryData(q) != ERROR_SUCCESS){
+        status = PdhAddCounterA(q, path, dwP, &pCounter);
+        if(status == ERROR_SUCCESS){
+            status = PdhCollectQueryData(q);
+            if(status != ERROR_SUCCESS){
                 PdhCloseQuery(q);
-                throw std::runtime_error(processes.formattedError("Collecting Query Data", true));
+                throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
             }
             std::this_thread::sleep_for(seconds(1));
-            if(PdhCollectQueryData(q) != ERROR_SUCCESS){
+            status = PdhCollectQueryData(q);
+            if(status != ERROR_SUCCESS){
                 PdhCloseQuery(q);
-                throw std::runtime_error(processes.formattedError("Collecting Query Data", true));
+                throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
             }
 
             PDH_FMT_COUNTERVALUE pValue = PDH_FMT_COUNTERVALUE{};
-            if(PdhGetFormattedCounterValue(pCounter, PDH_FMT_LONG | PDH_FMT_NOSCALE, NULL, &pValue) == ERROR_SUCCESS){
+            status = PdhGetFormattedCounterValue(pCounter, PDH_FMT_LONG | PDH_FMT_NOSCALE, NULL, &pValue);
+            if(status == ERROR_SUCCESS){
                 pValue.longValue /= (1024 * 1024); //byte to mb
                 cachedMem += pValue.longValue;
             }
             else{
                 PdhCloseQuery(q);
                 PdhRemoveCounter(pCounter);
-                throw std::runtime_error(processes.formattedError("Getting Formatted Counter", true));
+                throw std::runtime_error(processes.formattedError("Getting Formatted Counter", status));
             }
         }
         else{
             PdhCloseQuery(q);
             PdhRemoveCounter(pCounter);
-            throw std::runtime_error(processes.formattedError("Adding Counter", true));
+            throw std::runtime_error(processes.formattedError("Adding Counter", status));
         }
         PdhRemoveCounter(pCounter);
     }
     else{
         PdhCloseQuery(q);
-        throw std::runtime_error(processes.formattedError("Query Opening", true));
+        throw std::runtime_error(processes.formattedError("Query Opening", status));
     }
     return cachedMem;
 }

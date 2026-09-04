@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <windows.h>
+#include <pdh.h>
 #include <tlhelp32.h>
 #include <stdexcept>
 
@@ -44,8 +45,8 @@ class Processes{
         bool windowProcess(DWORD pid);
         //Returns a string message of the last error returned by GetLastError
         std::string formattedError(std::string msg) noexcept;
-        //Returns a string message of the last PDH error returned by GetLastError
-        std::string formattedError(std::string msg, bool PDHError) noexcept;
+        //Returns a string message for a PDH status code
+        std::string formattedError(std::string msg, PDH_STATUS errorCode) noexcept;
 };
 
 #endif

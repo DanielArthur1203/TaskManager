@@ -259,35 +259,39 @@ std::unordered_map<std::wstring, double> Disk::writeSpeed(){
 std::unordered_map<std::wstring, double> Disk::responseTime(){
     std::unordered_map<std::wstring, double> rTime;
     
-
+    int i = 0;
     for(auto it = names.begin(); it != names.end(); ++it){
         PDH_HQUERY ph;
         PDH_HCOUNTER hc;
         PDH_FMT_COUNTERVALUE val;
 
         it->erase(2); //Each name is formatted as L"C:\\"
-        if(PdhOpenQuery(NULL, 0, &ph) != ERROR_SUCCESS){
-            throw std::runtime_error(processes.formattedError("Opening Query For Disk", true));
+        PDH_STATUS status = PdhOpenQuery(NULL, 0, &ph);
+        if(status != ERROR_SUCCESS){
+            throw std::runtime_error(processes.formattedError("Opening Query For Disk", status));
         }
 
-        std::wstring path = L"\\PhysicalDisk(0 " + *it + L")\\Avg. Disk sec/Transfer";
+        std::wstring path = L"\\PhysicalDisk(" + std::to_wstring(i) + L" " + *it + L")\\Avg. Disk sec/Transfer";
         LPCSTR ex = wstrToLPCSTR(path);
-        if(PdhAddCounter(ph, wstrToLPCSTR(path), 0, &hc) != ERROR_SUCCESS){
+        status = PdhAddCounter(ph, wstrToLPCSTR(path), 0, &hc);
+        if(status != ERROR_SUCCESS){
             PdhCloseQuery(ph);
-            throw std::runtime_error(processes.formattedError("Adding Counter For Disk Rsp. Time", true));
+            throw std::runtime_error(processes.formattedError("Adding Counter For Disk Rsp. Time", status));
         }
 
         PdhCollectQueryData(ph);
         std::this_thread::sleep_for(seconds(1));
         PdhCollectQueryData(ph);
 
-        if(PdhGetFormattedCounterValue(hc, PDH_FMT_DOUBLE, NULL, &val) != ERROR_SUCCESS){
+        status = PdhGetFormattedCounterValue(hc, PDH_FMT_DOUBLE, NULL, &val);
+        if(status != ERROR_SUCCESS){
             PdhCloseQuery(ph);
-            throw std::runtime_error(processes.formattedError("Getting Disk Rsp. Counter Value", true));
+            throw std::runtime_error(processes.formattedError("Getting Disk Rsp. Counter Value", status));
         }
 
         rTime.insert({*it, val.doubleValue * 1000.0});
         PdhCloseQuery(ph);
+        i++;
     }
     return rTime;
 }

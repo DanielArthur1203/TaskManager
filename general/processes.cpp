@@ -218,28 +218,27 @@ std::string Processes::formattedError(std::string msg) noexcept{
     return response;
 }
 
-std::string Processes::formattedError(std::string msg, bool PDHError) noexcept{
+std::string Processes::formattedError(std::string msg, PDH_STATUS errorCode) noexcept{
     HMODULE hPdhLibrary = LoadLibraryA("pdh.dll");
     if(hPdhLibrary == NULL){
         DWORD loadErr = GetLastError();
         return msg + " failed (couldn't load pdh.dll), error " + std::to_string(loadErr);
     }
 
-    DWORD dwErrorCode = GetLastError();
     LPWSTR pMessage = NULL;
 
     if(!FormatMessageW(FORMAT_MESSAGE_FROM_HMODULE |
                     FORMAT_MESSAGE_ALLOCATE_BUFFER |
                     FORMAT_MESSAGE_IGNORE_INSERTS,
                     hPdhLibrary,
-                    dwErrorCode,
+                    static_cast<DWORD>(errorCode),
                     0,
                     (LPWSTR)&pMessage,
                     0,
                     NULL))
     {
         FreeLibrary(hPdhLibrary);
-        return msg + " failed with error number " + std::to_string(dwErrorCode);
+        return msg + " failed with error number " + std::to_string(static_cast<DWORD>(errorCode));
     }
 
     // Convert wide string to UTF-8 std::string
@@ -254,7 +253,7 @@ std::string Processes::formattedError(std::string msg, bool PDHError) noexcept{
     FreeLibrary(hPdhLibrary);
 
     if(text.empty()){
-        return msg + " failed with error number " + std::to_string(dwErrorCode);
+        return msg + " failed with error number " + std::to_string(static_cast<DWORD>(errorCode));
     }
 
     return msg + " failed: " + text;
