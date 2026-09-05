@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <list>
 #include <windows.h>
 #include <pdh.h>
 #include <tlhelp32.h>
@@ -33,9 +34,11 @@ class Processes{
 
         //Returns a vector of PROCESSENTRY32s for all active processes
         std::vector<PROCESSENTRY32> getAllActiveProcesses();
+        //Returns a linked list of process names without their exe for all active processes
+        std::list<std::string> allProcessesNames();
         //Returns a vector of PIDs of all processes that had the same exe name as the given param
         std::vector<DWORD> getPIDFromName(const std::wstring& name);
-        //Returns the exe name of the process coressponding to the given pid
+        //Returns the exe name of the process corresponding to the given pid
         std::wstring getNameFromPID(const DWORD pid);
         //First attempts to signal to the GUI process to close itself and after 5 seconds the process is forcefully terminated
         void closeWindowGUI(DWORD pid);

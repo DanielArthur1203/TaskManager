@@ -1,6 +1,9 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QTimer>
+#include <list>
+#include <string>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -15,6 +18,10 @@ class MainWindow : public QMainWindow{
         explicit MainWindow(QWidget *parent = nullptr);
         ~MainWindow();
 
-private:
-    Ui::MainWindow *ui;
+    private:
+        Ui::MainWindow *ui;
+        QTimer *timer;
+        std::list<std::string> oldProcessList;
+    private slots:
+        void refreshProcesses();
 };

@@ -12,7 +12,13 @@ qt_add_executable(TaskManager
 target_link_libraries(TaskManager
     PRIVATE
         taskmanager_core
+        taskmanager_general
         Qt${QT_VERSION_MAJOR}::Widgets
+)
+
+target_include_directories(TaskManager
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/general
 )
 
 target_compile_features(TaskManager PUBLIC cxx_std_23)

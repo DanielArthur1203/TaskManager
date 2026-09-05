@@ -34,6 +34,25 @@ std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses(){
     return processes;
 }
 
+std::list<std::string> Processes::allProcessesNames(){
+    std::list<std::string> names;
+
+    auto p32s = getAllActiveProcesses();
+
+    for(const auto& p32 : p32s){
+        std::string temp = p32.szExeFile;
+        auto exePos = temp.find(".exe");
+
+        if(exePos != std::string::npos){
+            names.push_back(temp.substr(0, exePos));
+        }
+        else{
+            names.push_back(temp);
+        }
+    }
+    return names;
+}
+
 std::vector<DWORD> Processes::getPIDFromName(const std::wstring &name){
     std::vector<DWORD> pids = std::vector<DWORD>();
     HANDLE handleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);

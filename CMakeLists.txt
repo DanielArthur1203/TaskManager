@@ -13,6 +13,6 @@ enable_testing()
 include(CTest)
 
 add_subdirectory(src)
-add_subdirectory(gui)
 add_subdirectory(general)
+add_subdirectory(gui)
 add_subdirectory(tests)
