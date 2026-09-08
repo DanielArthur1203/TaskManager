@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <list>
 #include <string>
+#include <vector>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -22,6 +23,11 @@ class MainWindow : public QMainWindow{
         Ui::MainWindow *ui;
         QTimer *timer;
         std::list<std::string> oldProcessList;
+
+        //Gets whats in oldProcessList but not names
+        std::vector<std::string> getDifferences1(std::list<std::string>& names);
+        //Get whats in names but not oldProcessList
+        std::vector<std::string> getDifferences2(std::list<std::string>& names);
     private slots:
         void refreshProcesses();
 };

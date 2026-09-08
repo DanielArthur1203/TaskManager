@@ -3,9 +3,76 @@
 #include <shellapi.h>
 #include <intsafe.h>
 #include <pdhmsg.h>
+#include <shobjidl.h>
+#include <propkey.h>
 #include <stdexcept>
 
 bool Processes::closed = false;
+
+LPCSTR Processes::wStringToString(std::wstring &string){
+    int size = WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), NULL, 0, NULL, NULL);
+
+    static thread_local std::string str;
+    str.assign(size, '\0');
+
+    if (size > 0) {
+        WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), str.data(), size, NULL, NULL);
+    }
+
+    return str.c_str();
+}
+
+std::wstring Processes::fullPathFromPID(DWORD pid){
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+
+    if(h == INVALID_HANDLE_VALUE){
+        throw std::runtime_error(formattedError("Opening Process" + pid));
+    }
+
+    std::wstring name(MAX_PATH, 0);
+    DWORD size = MAX_PATH;
+
+    if(!(QueryFullProcessImageNameW(h, 0, name.data(), &size))){
+        CloseHandle(h);
+        throw std::runtime_error(formattedError("Getting Full Path Name For Process" + pid));
+    }
+    CloseHandle(h);
+    return name;
+}
+
+std::wstring Processes::fileDescriptorName(std::wstring &fullPath){
+    HRESULT res = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+    if(FAILED(res)){
+        throw std::runtime_error("Getting File Descriptor For " + std::string(wStringToString(fullPath)) 
+            + " Failed With HRESULT Code " + std::to_string(res));
+    }
+
+    IShellItem2* item = nullptr;
+    res = SHCreateItemFromParsingName(fullPath.data(), NULL, IID_PPV_ARGS(&item));
+
+    if(FAILED(res)){
+        CoUninitialize();
+        throw std::runtime_error("Creating Parsing Name For " + std::string(wStringToString(fullPath)) 
+            + " Failed With HRESULT Code " + std::to_string(res));
+    }
+
+    PWSTR desc = nullptr;
+    res = item->GetString(PKEY_FileDescription, &desc);
+
+    if(FAILED(res) || desc == nullptr){
+        CoUninitialize();
+        item->Release();
+        throw std::runtime_error("Reading File Desc. For " + std::string(wStringToString(fullPath)) + " Failed");
+    }
+
+    std::wstring d(desc);
+
+    CoTaskMemFree(desc);
+    item->Release();
+    CoUninitialize();
+    return d;
+}
 
 std::vector<PROCESSENTRY32> Processes::getAllActiveProcesses(){
     std::vector<PROCESSENTRY32> processes = std::vector<PROCESSENTRY32>();
@@ -40,15 +107,53 @@ std::list<std::string> Processes::allProcessesNames(){
     auto p32s = getAllActiveProcesses();
 
     for(const auto& p32 : p32s){
-        std::string temp = p32.szExeFile;
-        auto exePos = temp.find(".exe");
+        std::wstring path = L"";
+        try{
+            path = fullPathFromPID(p32.th32ProcessID);
+        }
+        catch(const std::runtime_error& e){
+            std::string temp = p32.szExeFile;
+            auto exePos = temp.find(".exe");
 
-        if(exePos != std::string::npos){
-            names.push_back(temp.substr(0, exePos));
+            if(exePos != std::string::npos){
+                names.push_back(temp.substr(0, exePos));
+            }
+            else{
+                names.push_back(temp);
+            }
+            continue;
         }
-        else{
-            names.push_back(temp);
+
+        std::wstring name = L"";
+        try{
+            name = fileDescriptorName(path);
         }
+        catch(const std::runtime_error& e){
+            std::string temp = p32.szExeFile;
+            auto exePos = temp.find(".exe");
+
+            if(exePos != std::string::npos){
+                names.push_back(temp.substr(0, exePos));
+            }
+            else{
+                names.push_back(temp);
+            }
+            continue;
+        }
+
+        if(name.empty()){
+            std::string temp = p32.szExeFile;
+            auto exePos = temp.find(".exe");
+
+            if(exePos != std::string::npos){
+                names.push_back(temp.substr(0, exePos));
+            }
+            else{
+                names.push_back(temp);
+            }
+            continue;
+        }
+        names.push_back(std::string(wStringToString(name)));
     }
     return names;
 }
