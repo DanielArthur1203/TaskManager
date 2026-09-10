@@ -35,6 +35,7 @@ class WiFi{
         std::unordered_map<unsigned long, std::string> ipV4Address();
         //Returns a map where each adapter index is matched with its IPv6 address
         std::unordered_map<unsigned long, std::wstring> ipV6Address();
+        //Forgot why I commented this out but I'm assuming it's not accurate and I was going to have a stroke
         double processInternetUsage(DWORD pid);
 };
 

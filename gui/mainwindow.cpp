@@ -3,6 +3,7 @@
 #include "processes.hpp"
 #include <QMessageBox>
 #include <QTableWidget>
+#include <QScrollBar>
 #include <algorithm>
 #include <cctype>
 #include <iterator>
@@ -11,6 +12,8 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ui(new Ui::MainWin
     ui->setupUi(this);
     ui->processesTable->setColumnCount(6);
     ui->processesTable->verticalHeader()->setVisible(false);
+    ui->processesTable->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    ui->processesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
     QStringList headers;
     headers << "Name" << "CPU" << "Memory" << "Disk" << "Network" << "GPU";
@@ -18,10 +21,16 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ui(new Ui::MainWin
     refreshProcesses();
 
     timer = new QTimer(this);
-
     connect(timer, &QTimer::timeout, this, &MainWindow::refreshProcesses);
     timer->start(1000);
 
+    scrollTimer = new QTimer(this);
+    scrollTimer->setInterval(150);
+    scrollTimer->setSingleShot(true);
+    connect(scrollTimer, &QTimer::timeout, this, &MainWindow::scrollStopped);
+
+    connect(ui->processesTable->verticalScrollBar(), &QScrollBar::valueChanged, this, &MainWindow::handleScroll);
+    ui->processesTable->setColumnWidth(0, 150); //Name
 }
 
 MainWindow::~MainWindow(){
@@ -44,9 +53,74 @@ std::vector<std::string> MainWindow::getDifferences2(std::list<std::string> &nam
     return diff;
 }
 
+void MainWindow::resolveDifferences(std::list<std::string>& names){
+    auto diff1 = getDifferences1(names);
+    auto diff2 = getDifferences2(names);
+
+    //Need to delete only
+    if((!diff1.empty()) && diff2.empty()){
+        for(const auto& diff: diff1){
+            QString s = QString::fromStdString(diff);
+            QList<QTableWidgetItem*> items = ui->processesTable->findItems(s, Qt::MatchExactly);
+
+            auto item = items.first();
+            int row = item->row();
+            ui->processesTable->removeRow(row);
+        }
+    }
+    //Need to add only
+    else if(diff1.empty() && (!diff2.empty())){
+        for(const auto& diff: diff2){
+            QString s = QString::fromStdString(diff);
+            int rowCount = ui->processesTable->rowCount();
+            int insertIndex = rowCount;
+            for(int i = 0; i < rowCount; i++){
+                auto item = ui->processesTable->item(i, 0);
+
+                if(item){
+                    if(s.compare(item->text(), Qt::CaseInsensitive) < 0){
+                        insertIndex = i;
+                        break;
+                    }
+                }
+            }
+            ui->processesTable->insertRow(insertIndex);
+            ui->processesTable->setItem(insertIndex, 0, new QTableWidgetItem(s));
+        }   
+    }
+    //Need both
+    else{
+        //Delete first
+        for(const auto& diff: diff1){
+            QString s = QString::fromStdString(diff);
+            QList<QTableWidgetItem*> items = ui->processesTable->findItems(s, Qt::MatchExactly);
+
+            auto item = items.first();
+            int row = item->row();
+            ui->processesTable->removeRow(row);
+        }
+        //Then add
+        for(const auto& diff: diff2){
+            QString s = QString::fromStdString(diff);
+            int rowCount = ui->processesTable->rowCount();
+            int insertIndex = rowCount;
+            for(int i = 0; i < rowCount; i++){
+                auto item = ui->processesTable->item(i, 0);
+
+                if(item){
+                    if(s.compare(item->text(), Qt::CaseInsensitive) < 0){
+                        insertIndex = i;
+                        break;
+                    }
+                }
+            }
+            ui->processesTable->insertRow(insertIndex);
+            ui->processesTable->setItem(insertIndex, 0, new QTableWidgetItem(s));
+        }
+    }   
+}
+
 void MainWindow::refreshProcesses(){
-    //something here causes hitches while scrolling idk what
-    //QCoreApplication::processEvents();
     Processes p;
     std::list<std::string> names;
 
@@ -83,17 +157,22 @@ void MainWindow::refreshProcesses(){
         }
         oldProcessList = names;
     }
-    else if(!(std::is_permutation(names.begin(), names.end(), oldProcessList.begin(), oldProcessList.end()))){
-        ui->processesTable->setRowCount(names.size());
-        int i = 0;
-        ui->processesTable->clearContents();
-        for(const auto& name: names){
-            QString a = QString::fromStdString(name);
-            QTableWidgetItem *item = new QTableWidgetItem(a);
-
-            ui->processesTable->setItem(i, 0, item);
-            i++;
+    else if(!(names == oldProcessList)){
+        if(names.size() != oldProcessList.size()){
+            ui->processesTable->setRowCount(names.size());
         }
+        resolveDifferences(names);
         oldProcessList = names;
     }
+}
+
+void MainWindow::scrollStopped(){
+    timer->start();
+}
+
+void MainWindow::handleScroll(){
+    if(timer->isActive()){
+        timer->stop();
+    }
+    scrollTimer->start();
 }

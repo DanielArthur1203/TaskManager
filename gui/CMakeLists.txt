@@ -7,6 +7,7 @@ qt_add_executable(TaskManager
     mainwindow.cpp
     mainwindow.h
     mainwindow.ui
+    usagestats.cpp
 )
 
 target_link_libraries(TaskManager
