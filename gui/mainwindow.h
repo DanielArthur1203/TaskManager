@@ -6,7 +6,9 @@
 #include <list>
 #include <string>
 #include <vector>
-#include <unordered_map>
+#include <map>
+#include <memory>
+#include <variant>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -26,13 +28,15 @@ class MainWindow : public QMainWindow{
         QTimer *timer;
         QTimer *scrollTimer;
         std::list<std::string> oldProcessList;
-        std::unordered_map<std::string, UsageStats> map;
-
+        std::map<std::string, UsageStats> map;
+        std::map<std::string, UsageStats> oldMap;
         //Gets whats in oldProcessList but not names
         std::vector<std::string> getDifferences1(std::list<std::string>& names);
         //Get whats in names but not oldProcessList
         std::vector<std::string> getDifferences2(std::list<std::string>& names);
         void resolveDifferences(std::list<std::string>& names);
+        void populateMapHelper(std::string& name, Processes& p);
+        void populateMap(std::list<std::string>& names, Processes& p);
     private slots:
         void refreshProcesses();
         void scrollStopped();

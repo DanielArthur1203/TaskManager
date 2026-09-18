@@ -18,6 +18,12 @@ TEST(ProcessesTest, allProcessesNames){
     EXPECT_FALSE(a.allProcessesNames().empty());
 }
 
+TEST(ProcessesTest, allProcessNamesWithExe){
+    Processes a;
+    EXPECT_NO_THROW(a.allProcessNamesWthExe());
+    EXPECT_FALSE(a.allProcessNamesWthExe().empty());
+}
+
 TEST(ProcessesTest, getPIDFromName){
     Processes a;
     std::wstring name = L"Code.exe";

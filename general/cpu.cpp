@@ -40,7 +40,8 @@ double Cpu::getBaseSpeed(){
     }
     else{
         RegCloseKey(hKey);
-        throw std::runtime_error("Opening Registry Key Failed");
+        std::string errorMsg = "Opening Registry Key Failed";
+        throw std::runtime_error(errorMsg);
     }
     return static_cast<double>(mhz) / 1000.0;
 }
@@ -50,13 +51,15 @@ std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> Cpu::getProcessorInfo(){
     
     //Meant to fail
     if((GetLogicalProcessorInformation(nullptr, &buffer))){
-        throw std::runtime_error(processes.formattedError("Getting Buffer Size"));
+        std::string errorMsg = processes.formattedError("Getting Buffer Size");
+        throw std::runtime_error(errorMsg);
     }
 
     std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> infoVec(buffer / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
 
     if(!(GetLogicalProcessorInformation(infoVec.data(), &buffer))){
-        throw std::runtime_error(processes.formattedError("Getting Logical Processor Info"));
+        std::string errorMsg = processes.formattedError("Getting Logical Processor Info");
+        throw std::runtime_error(errorMsg);
     }
 
     return infoVec;
@@ -67,14 +70,16 @@ unsigned long long Cpu::getSnap(DWORD pid){
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
     
     if(h == NULL){
-        throw std::runtime_error(processes.formattedError("Opening Process " + pid));
+        std::string errorMsg = processes.formattedError("Opening Process " + pid);
+        throw std::runtime_error(errorMsg);
     }
 
     FILETIME creation, exit, kernel, user;
 
     if(!(GetProcessTimes(h, &creation, &exit, &kernel, &user))){
         CloseHandle(h);
-        throw std::runtime_error(processes.formattedError("Getting Process Times For Process " + pid));
+        std::string errorMsg = processes.formattedError("Getting Process Times For Process " + pid);
+        throw std::runtime_error(errorMsg);
     }
 
     usage += fileTimeToULL(kernel) + fileTimeToULL(user);
@@ -86,14 +91,16 @@ double Cpu::currentUsage(){
     FILETIME idle, kernel, user;
 
     if(!GetSystemTimes(&idle, &kernel, &user)){
-        throw std::runtime_error(processes.formattedError("Getting System Times"));
+        std::string errorMsg = processes.formattedError("Getting System Times");
+        throw std::runtime_error(errorMsg);
     }
     std::this_thread::sleep_for(seconds(1));
 
     FILETIME idle2, kernel2, user2;
 
     if(!GetSystemTimes(&idle2, &kernel2, &user2)){
-        throw std::runtime_error(processes.formattedError("Getting System Times"));
+        std::string errorMsg = processes.formattedError("Getting System Times");
+        throw std::runtime_error(errorMsg);
     }
 
     auto i1 = fileTimeToULL(idle);
@@ -152,8 +159,8 @@ double Cpu::processUsage(DWORD pid){
     return usage;
 }
 
-double Cpu::processNameTotalUsage(DWORD pid){
-    double usage = 0;
+void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage){
+    //double usage = 0;
 
     std::wstring singleName = processes.getNameFromPID(pid);
     std::vector<DWORD> allPIDS = processes.getPIDFromName(singleName);
@@ -167,15 +174,29 @@ double Cpu::processNameTotalUsage(DWORD pid){
             }));
         } 
         catch(std::runtime_error& e){
-            throw std::runtime_error(e.what());
+            std::string msg = e.what();
+            if(msg.contains("5")){
+                continue;
+            }
+            throw std::runtime_error(msg);
         }
     }
 
     for(auto it = results.begin(); it != results.end(); ++it){
-        usage += it->get();
+        if(auto type = std::get_if<double>(&usage)){
+            *type += it->get();
+        }
+        else{
+            usage = 0.0;
+            std::get<double>(usage) += it->get();
+        }
+        //usage += it->get();
     }
-    usage = std::round(usage * 10) / 10;
-    return usage;
+    if(auto type = std::get_if<double>(&usage)){
+        *type = std::round(*type * 10) / 10;
+    }
+    //usage = std::round(usage * 10) / 10;
+    //return usage;
 }
 
 double Cpu::cpuClockSpeed(){
@@ -186,7 +207,8 @@ double Cpu::cpuClockSpeed(){
 
     PDH_STATUS status = PdhOpenQuery(nullptr, 0, &phQ);
     if(status != ERROR_SUCCESS){
-        throw std::runtime_error(processes.formattedError("Query Opening", status));
+        std::string errorMsg = processes.formattedError("Query Opening", status);
+        throw std::runtime_error(errorMsg);
     }
 
     LPCWSTR counter = L"\\Processor Information(_Total)\\% Processor Performance";
@@ -194,14 +216,16 @@ double Cpu::cpuClockSpeed(){
     status = PdhAddEnglishCounterW(phQ, counter, 0, &phC);
     if(status != ERROR_SUCCESS){
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Adding English Counter", status));
+        std::string errorMsg = processes.formattedError("Adding English Counter", status);
+        throw std::runtime_error(errorMsg);
     }
 
     status = PdhCollectQueryData(phQ);
     if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
+        std::string errorMsg = processes.formattedError("Collecting Query Data", status);
+        throw std::runtime_error(errorMsg);
     }
 
     std::this_thread::sleep_for(seconds(1));
@@ -210,7 +234,8 @@ double Cpu::cpuClockSpeed(){
     if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
+        std::string errorMsg = processes.formattedError("Collecting Query Data", status);
+        throw std::runtime_error(errorMsg);
     }
 
     PDH_FMT_COUNTERVALUE cValue = PDH_FMT_COUNTERVALUE();
@@ -220,7 +245,8 @@ double Cpu::cpuClockSpeed(){
     if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        throw std::runtime_error(processes.formattedError("Formatting Counter Value", status));
+        std::string errorMsg = processes.formattedError("Formatting Counter Value", status);
+        throw std::runtime_error(errorMsg);
     }
 
     speed = cValue.doubleValue / 100.0;

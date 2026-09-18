@@ -394,3 +394,30 @@ double Disk::allProcessNameDiskUsage(DWORD pid){
 
     return usage;
 }
+
+void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage){
+    std::list<std::future<double>> results;
+
+    for(const auto& pid: pids){
+        try{
+            DWORD id = pid;
+            results.push_back(std::async(std::launch::async, [this, id](){
+                return processDiskUsage(id);
+            }));
+        }
+        catch(const std::runtime_error& e){
+            throw std::runtime_error(e.what());
+        }
+    }
+
+    for(auto& result: results){
+        if(auto type = std::get_if<double>(&usage)){
+            *type += result.get();
+        }
+        else{
+            usage = 0.0;
+            std::get<double>(usage) += result.get();
+        }
+    }
+
+}

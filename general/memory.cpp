@@ -86,7 +86,6 @@ double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
         FALSE, pid);
 
     if(pHandle == NULL){
-        CloseHandle(pHandle);
         throw std::runtime_error(processes.formattedError("Process Handle Opening"));
     }
 
@@ -119,6 +118,24 @@ double MemoryInfo::getNamePhysicalMemoryUsage(const DWORD pid){
         }
     }
     return usage;
+}
+
+void MemoryInfo::getNamePhysicalMemoryUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage){
+    for(auto& pid: pids){
+        try{
+            if(auto type = std::get_if<double>(&usage)){
+                *type += getPhysicalMemoryUsage(pid);
+            }
+            else{
+                usage = 0.0;
+                std::get<double>(usage) += getPhysicalMemoryUsage(pid);
+            }
+            //usage += getPhysicalMemoryUsage(pid);
+        }
+        catch(const std::runtime_error& e){
+            throw std::runtime_error(e.what());
+        }
+    }
 }
 
 double MemoryInfo::getTotalPhysicalMemoryUsage(){

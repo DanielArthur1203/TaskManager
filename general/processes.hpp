@@ -42,6 +42,8 @@ class Processes{
         std::vector<PROCESSENTRY32> getAllActiveProcesses();
         //Returns a linked list of process names without their exe for all active processes
         std::list<std::string> allProcessesNames();
+        //Returns a linked list of process names with their exe for all active processes
+        std::list<std::string> allProcessNamesWthExe();
         //Returns a vector of PIDs of all processes that had the same exe name as the given param
         std::vector<DWORD> getPIDFromName(const std::wstring& name);
         //Returns the exe name of the process corresponding to the given pid
