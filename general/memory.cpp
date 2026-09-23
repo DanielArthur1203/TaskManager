@@ -45,13 +45,15 @@ unsigned long MemoryInfo::PDHQueryHelper(PDH_HQUERY &q, DWORD_PTR &dwP, LPCSTR p
             status = PdhCollectQueryData(q);
             if(status != ERROR_SUCCESS){
                 PdhCloseQuery(q);
-                throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
+                std::string errMsg = processes.formattedError("Collecting Query Data", status);
+                throw std::runtime_error(errMsg);
             }
             std::this_thread::sleep_for(seconds(1));
             status = PdhCollectQueryData(q);
             if(status != ERROR_SUCCESS){
                 PdhCloseQuery(q);
-                throw std::runtime_error(processes.formattedError("Collecting Query Data", status));
+                std::string errorMsg = processes.formattedError("Collecting Query Data", status);
+                throw std::runtime_error(errorMsg);
             }
 
             PDH_FMT_COUNTERVALUE pValue = PDH_FMT_COUNTERVALUE{};
@@ -63,7 +65,8 @@ unsigned long MemoryInfo::PDHQueryHelper(PDH_HQUERY &q, DWORD_PTR &dwP, LPCSTR p
             else{
                 PdhCloseQuery(q);
                 PdhRemoveCounter(pCounter);
-                throw std::runtime_error(processes.formattedError("Getting Formatted Counter", status));
+                std::string errorMsg = processes.formattedError("Getting Formatted Counter", status);
+                throw std::runtime_error(errorMsg);
             }
         }
         else{
@@ -86,7 +89,8 @@ double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
         FALSE, pid);
 
     if(pHandle == NULL){
-        throw std::runtime_error(processes.formattedError("Process Handle Opening"));
+        std::string errorMsg = processes.formattedError("Process Handle Opening");
+        throw std::runtime_error(errorMsg);
     }
 
     //Realized I could just define EX2 to bypass the weird EX2 is not defined error 
@@ -97,7 +101,8 @@ double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
     }
     else{
         CloseHandle(pHandle);
-        throw std::runtime_error(processes.formattedError("Memory Info Retrieval"));
+        std::string errorMsg = processes.formattedError("Memory Info Retrieval");
+        throw std::runtime_error(errorMsg);
     }
     memTotal = std::round(memTotal * 100) / 100;
     CloseHandle(pHandle);
@@ -120,7 +125,35 @@ double MemoryInfo::getNamePhysicalMemoryUsage(const DWORD pid){
     return usage;
 }
 
-void MemoryInfo::getNamePhysicalMemoryUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage){
+void MemoryInfo::getNamePhysicalMemoryUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
+    bool setDouble = false;
+    for(auto& pid: pids){
+        try{
+            if(auto type = std::get_if<double>(&usage)){
+                if(!setDouble){
+                    usage = 0.0;
+                    setDouble = true;
+                }
+                
+                *type += getPhysicalMemoryUsage(pid);
+            }
+            else{
+                if(!setDouble){
+                    usage = 0.0;
+                    setDouble = true;
+                }
+                std::get<double>(usage) += getPhysicalMemoryUsage(pid);
+            }
+            //usage += getPhysicalMemoryUsage(pid);
+        }
+        catch(const std::runtime_error& e){
+            ptr = std::current_exception();
+            //throw std::runtime_error(e.what());
+        }
+    }
+}
+
+void MemoryInfo::getNamePhysicalMemoryUsage(std::vector<DWORD> pids, std::variant<double, std::string> &usage){
     for(auto& pid: pids){
         try{
             if(auto type = std::get_if<double>(&usage)){
@@ -133,6 +166,7 @@ void MemoryInfo::getNamePhysicalMemoryUsage(std::vector<DWORD> pids, std::varian
             //usage += getPhysicalMemoryUsage(pid);
         }
         catch(const std::runtime_error& e){
+            //ptr = std::current_exception();
             throw std::runtime_error(e.what());
         }
     }

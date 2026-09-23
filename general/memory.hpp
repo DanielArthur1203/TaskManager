@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <variant>
+#include <stdexcept>
 #include <windows.h>
 #include <pdh.h>
 
@@ -21,6 +22,7 @@ class MemoryInfo{
         //Returns private working set size in MiB of all processes with the same exe name as the given PID
         double getNamePhysicalMemoryUsage(const DWORD pid);
         //Same as the one above except it doesn't perform a call to get all active processes
+        void getNamePhysicalMemoryUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
         void getNamePhysicalMemoryUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage);
         //Returns working set size of all non PPL and PP-L processes in MiB
         double getTotalPhysicalMemoryUsage();

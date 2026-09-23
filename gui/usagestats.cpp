@@ -14,6 +14,7 @@ UsageStats::UsageStats(int pid, bool isPPL){
     else{
         try{
             this->pid = pid;
+            //higher than it should be fml
             startCPUsageReport(this->pid);
             startMemoryUsageReport(this->pids);
             startDiskUsageReport(this->pids);
@@ -43,13 +44,12 @@ UsageStats::UsageStats(int pid, bool isPPL, std::vector<DWORD>& pids){
     }
     else{
         try{
-            data->cpuUsage = "N/A";
-            data->memoryUsage = "N/A";
-            data->diskUsage = "N/A";
             this->pid = pid;
             this->pids = pids;
             startCPUsageReport(this->pid);
-            //startMemoryUsageReport(this->pids);
+            //checkSharedException();
+            startMemoryUsageReport(this->pids);
+            startDiskUsageReport(this->pids);
             //memoryUsage = memory->getNamePhysicalMemoryUsage(pid);
             //diskUsage = disk->allProcessNameDiskUsage(pid);
         }
@@ -70,6 +70,9 @@ UsageStats::UsageStats(int pid, bool isPPL, std::vector<DWORD>& pids){
 
 UsageStats::UsageStats(UsageStats &&other) noexcept{
     std::scoped_lock lock(other.mtx, other.mtx2, other.mtx3);
+
+    sharedException = other.sharedException;
+    other.sharedException = nullptr;
 
     report = std::move(other.report);
     memoryReport = std::move(other.memoryReport);
@@ -102,27 +105,6 @@ UsageStats::~UsageStats(){
     stopThreads();
 }
 
-// void UsageStats::cpuReportStartHelper(std::stop_token tok, int pid){
-//     try{
-//         while(!tok.stop_requested()){
-//             {
-//                 std::lock_guard<std::mutex> lock(this->mtx);
-//                 this->cpu->processNameTotalUsage(pid, this->cpuUsage);
-//             }
-//             //In the method is a 1 second sleep it shouldn't need this I hope
-//             //std::this_thread::sleep_for(seconds(1));
-//         }
-//     }
-//     catch(const std::runtime_error& e){
-//         if(!std::string(e.what()).contains("5")){
-//             throw std::runtime_error(e.what());
-//         }
-//     }
-//     catch(const std::exception& e){
-//         throw std::runtime_error(e.what());
-//     }
-// }
-
 void UsageStats::startCPUsageReport(int pid){
     //report = std::jthread(&UsageStats::cpuReportStartHelper, this, pid);
     auto ptr = this->data;
@@ -131,7 +113,7 @@ void UsageStats::startCPUsageReport(int pid){
             while(!tok.stop_requested()){
                 {
                     std::lock_guard<std::mutex> lock(ptr->mtx);
-                    this->cpu->processNameTotalUsage(pid, ptr->cpuUsage);
+                    this->cpu->processNameTotalUsage(pid, ptr->cpuUsage, std::ref(sharedException));
                 }
 
                 if (tok.stop_requested()) break;
@@ -152,26 +134,6 @@ void UsageStats::startCPUsageReport(int pid){
         }
     });
 }
-
-// void UsageStats::memoryReportStartHelper(std::stop_token tok, std::vector<DWORD> pids){
-//     try{
-//         while(!tok.stop_requested()){
-//             {
-//                 std::lock_guard<std::mutex> lock(this->mtx2);
-//                 this->memory->getNamePhysicalMemoryUsage(pids);
-//             }
-//             std::this_thread::sleep_for(seconds(1));
-//         }
-//     }
-//     catch(const std::runtime_error& e){
-//         if(!std::string(e.what()).contains("5")){
-//             throw std::runtime_error(e.what());
-//         }
-//     }
-//     catch(const std::exception& e){
-//         throw std::runtime_error(e.what());
-//     }
-// }
 
 void UsageStats::startMemoryUsageReport(std::vector<DWORD> pids){
     //memoryReport = std::jthread(&UsageStats::memoryReportStartHelper, this, pids);
@@ -181,7 +143,7 @@ void UsageStats::startMemoryUsageReport(std::vector<DWORD> pids){
             while(!tok.stop_requested()){
                 {
                     std::lock_guard<std::mutex> lock(ptr->mtx2);
-                    this->memory->getNamePhysicalMemoryUsage(pids, ptr->memoryUsage);
+                    this->memory->getNamePhysicalMemoryUsage(pids, ptr->memoryUsage, std::ref(sharedException));
                 }
                 if (tok.stop_requested()) break;
 
@@ -202,26 +164,6 @@ void UsageStats::startMemoryUsageReport(std::vector<DWORD> pids){
     });
 }
 
-// void UsageStats::diskReportStartHelper(std::stop_token tok, std::vector<DWORD> pids){
-//     try{
-//         while(!tok.stop_requested()){
-//             {
-//                 std::lock_guard<std::mutex> lock(this->mtx3);
-//                 this->disk->allProcessNameDiskUsage(pids);
-//             }
-//             //std::this_thread::sleep_for(seconds(1));
-//         }
-//     }
-//     catch(const std::runtime_error& e){
-//         if(!std::string(e.what()).contains("5")){
-//             throw std::runtime_error(e.what());
-//         }
-//     }
-//     catch(const std::exception& e){
-//         throw std::runtime_error(e.what());
-//     }
-// }
-
 void UsageStats::startDiskUsageReport(std::vector<DWORD> pids){
     //diskReport = std::jthread(&UsageStats::diskReportStartHelper, this, pids);
     auto ptr = this->data;
@@ -230,7 +172,7 @@ void UsageStats::startDiskUsageReport(std::vector<DWORD> pids){
             while(!tok.stop_requested()){
                 {
                     std::lock_guard<std::mutex> lock(ptr->mtx3);
-                    this->disk->allProcessNameDiskUsage(pids, ptr->diskUsage);
+                    this->disk->allProcessNameDiskUsage(pids, ptr->diskUsage, std::ref(sharedException));
                 }
                 if (tok.stop_requested()) break;
 
@@ -249,6 +191,26 @@ void UsageStats::startDiskUsageReport(std::vector<DWORD> pids){
             throw std::runtime_error(e.what());
         }
     });
+}
+
+void UsageStats::checkSharedException(){
+    if(sharedException){
+        try{
+            std::rethrow_exception(sharedException);
+        }
+        catch(const std::runtime_error& e){
+            std::string msg = e.what();
+            if(msg.contains("5") || msg.contains("87")){
+                stopThreads();
+            }
+            else{
+                throw std::runtime_error(e.what());
+            }
+        }
+        catch(const std::exception& e){
+            std::rethrow_exception(sharedException);
+        }
+    }
 }
 
 void UsageStats::stopThreads(){

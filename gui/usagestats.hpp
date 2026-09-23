@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 #include <array>
+#include <stdexcept>
 
 struct DataHolder{
     mutable std::mutex mtx;
@@ -25,6 +26,7 @@ struct DataHolder{
 class UsageStats{
     private:
         std::shared_ptr<DataHolder> data = std::make_shared<DataHolder>();
+        std::exception_ptr sharedException = nullptr;
         mutable std::mutex mtx;
         mutable std::mutex mtx2;
         mutable std::mutex mtx3;
@@ -39,12 +41,10 @@ class UsageStats{
         std::unique_ptr<MemoryInfo> memory = std::make_unique<MemoryInfo>();
         std::unique_ptr<Disk> disk = std::make_unique<Disk>();
 
-        //void cpuReportStartHelper(std::stop_token tok, int pid);
         void startCPUsageReport(int pid);
-        // void memoryReportStartHelper(std::stop_token tok, std::vector<DWORD> pids);
         void startMemoryUsageReport(std::vector<DWORD> pids);
-        //void diskReportStartHelper(std::stop_token tok, std::vector<DWORD> pids);
         void startDiskUsageReport(std::vector<DWORD> pids);
+        void checkSharedException();
     public:
         UsageStats(int pid, bool isPPL);
         UsageStats(int pid, bool isPPL, std::vector<DWORD>& pids);

@@ -11,7 +11,7 @@
 #include <future>
 #include <thread>
 #include <chrono>
-
+#include <unordered_set>
 
 using namespace std::chrono;
 
@@ -28,16 +28,16 @@ MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ui(new Ui::MainWin
     refreshProcesses();
 
     //Timer blows it up now
-    // timer = new QTimer(this);
-    // connect(timer, &QTimer::timeout, this, &MainWindow::refreshProcesses);
-    // timer->start(1000);
+    timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &MainWindow::refreshProcesses);
+    timer->start(1000);
 
-    // scrollTimer = new QTimer(this);
-    // scrollTimer->setInterval(150);
-    // scrollTimer->setSingleShot(true);
-    // connect(scrollTimer, &QTimer::timeout, this, &MainWindow::scrollStopped);
+    scrollTimer = new QTimer(this);
+    scrollTimer->setInterval(150);
+    scrollTimer->setSingleShot(true);
+    connect(scrollTimer, &QTimer::timeout, this, &MainWindow::scrollStopped);
 
-    // connect(ui->processesTable->verticalScrollBar(), &QScrollBar::valueChanged, this, &MainWindow::handleScroll);
+    connect(ui->processesTable->verticalScrollBar(), &QScrollBar::valueChanged, this, &MainWindow::handleScroll);
     ui->processesTable->setColumnWidth(0, 150); //Name
 }
 
@@ -51,84 +51,57 @@ MainWindow::~MainWindow(){
 std::vector<std::string> MainWindow::getDifferences1(std::list<std::string>& names){
     std::vector<std::string> diff;
 
-    std::set_difference(oldProcessList.begin(), oldProcessList.end(),
-        names.begin(), names.end(), std::back_inserter(diff));
+    // std::set_difference(oldProcessList.begin(), oldProcessList.end(),
+    //     names.begin(), names.end(), std::back_inserter(diff));
+
+    for(const auto& name: names){
+        if(map.find(name) == map.end()){ //probably horrendously slow
+            diff.push_back(name);
+        }
+    }
     return diff;
 }
 
 std::vector<std::string> MainWindow::getDifferences2(std::list<std::string> &names){
     std::vector<std::string> diff;
 
-    std::set_difference(names.begin(), names.end(), oldProcessList.begin(), oldProcessList.end(), 
-        std::back_inserter(diff));
+    // std::set_difference(names.begin(), names.end(), oldProcessList.begin(), oldProcessList.end(), 
+    //     std::back_inserter(diff));
+
+    std::unordered_set<std::string> set(names.begin(), names.end());
+
+    for(const auto& pair: map){
+        if(set.find(pair.first) == set.end()){
+            diff.push_back(pair.first);
+        }
+    }
     return diff;
 }
 
-void MainWindow::resolveDifferences(std::list<std::string>& names){
+void MainWindow::resolveDifferences(std::list<std::string>& names, Processes& p){
     auto diff1 = getDifferences1(names);
     auto diff2 = getDifferences2(names);
 
-    //Need to delete only
-    if((!diff1.empty()) && diff2.empty()){
-        for(const auto& diff: diff1){
-            QString s = QString::fromStdString(diff);
-            QList<QTableWidgetItem*> items = ui->processesTable->findItems(s, Qt::MatchExactly);
-
-            auto item = items.first();
-            int row = item->row();
-            ui->processesTable->removeRow(row);
+    //only need to add
+    if(diff2.empty() && (!diff1.empty())){
+        for(auto& name: diff1){
+            populateMapHelper(name, p);
         }
     }
-    //Need to add only
+    //Only need to delete
     else if(diff1.empty() && (!diff2.empty())){
-        for(const auto& diff: diff2){
-            QString s = QString::fromStdString(diff);
-            int rowCount = ui->processesTable->rowCount();
-            int insertIndex = rowCount;
-            for(int i = 0; i < rowCount; i++){
-                auto item = ui->processesTable->item(i, 0);
-
-                if(item){
-                    if(s.compare(item->text(), Qt::CaseInsensitive) < 0){
-                        insertIndex = i;
-                        break;
-                    }
-                }
-            }
-            ui->processesTable->insertRow(insertIndex);
-            ui->processesTable->setItem(insertIndex, 0, new QTableWidgetItem(s));
-        }   
+        for(auto& name: diff2){
+            map.erase(name); //pray this works
+        }
     }
-    //Need both
-    else{
-        //Delete first
-        for(const auto& diff: diff1){
-            QString s = QString::fromStdString(diff);
-            QList<QTableWidgetItem*> items = ui->processesTable->findItems(s, Qt::MatchExactly);
-
-            auto item = items.first();
-            int row = item->row();
-            ui->processesTable->removeRow(row);
+    else{//Need both
+        for(auto& name: diff1){
+            populateMapHelper(name, p);
         }
-        //Then add
-        for(const auto& diff: diff2){
-            QString s = QString::fromStdString(diff);
-            int rowCount = ui->processesTable->rowCount();
-            int insertIndex = rowCount;
-            for(int i = 0; i < rowCount; i++){
-                auto item = ui->processesTable->item(i, 0);
-
-                if(item){
-                    if(s.compare(item->text(), Qt::CaseInsensitive) < 0){
-                        insertIndex = i;
-                        break;
-                    }
-                }
-            }
-            ui->processesTable->insertRow(insertIndex);
-            ui->processesTable->setItem(insertIndex, 0, new QTableWidgetItem(s));
+        for(auto& name: diff2){
+            map.erase(name); //pray this works
         }
-    }   
+    }
 }
 
 void MainWindow::populateMapHelper(std::string &name, Processes& p){
@@ -137,15 +110,18 @@ void MainWindow::populateMapHelper(std::string &name, Processes& p){
         //So just putting -1 should be fine
         std::wstring passed(name.begin(), name.end());
         std::vector<DWORD> pids = p.getPIDFromName(passed);
-        auto [iterator, inserted] = map.try_emplace(name, pids.at(0), true, pids);
+        if(!pids.empty()){
+            auto [iterator, inserted] = map.try_emplace(name, pids.at(0), true, pids);
+        }
         // UsageStats stat = UsageStats(-1, true);
         // map.emplace(std::make_pair(name, std::move(stat)));
     }
     else{
         std::wstring passed(name.begin(), name.end());
         std::vector<DWORD> pids = p.getPIDFromName(passed);
-        auto [iterator, inserted] = map.try_emplace(name, pids.at(0), false, pids);
-
+        if(!pids.empty()){
+            auto [iterator, inserted] = map.try_emplace(name, pids.at(0), false, pids);
+        }
         //UsageStats stat = UsageStats(pids.at(0), false, pids);
         //map.emplace(std::make_pair(name, std::move(stat)));
     }
@@ -153,26 +129,29 @@ void MainWindow::populateMapHelper(std::string &name, Processes& p){
 
 void MainWindow::populateMap(std::list<std::string> &names, Processes& p){
     auto start = steady_clock::now();
-    std::list<std::future<void>> results;
+    int count = 0;
+    //std::list<std::future<void>> results;
     //Names must be exe names
     for(auto& name: names){
         //qDebug() << "Doing process " + name;
         populateMapHelper(name, p);
+        count++;
     }
     // for(auto& res: results){
     //     res.get();
     // }
     auto end = steady_clock::now();
     duration<double> sec = end - start;
-    qDebug() << sec << " seconds"; //takes 3+ seconds
+    qDebug() << sec << " seconds";
+    qDebug() << count << " objects made";
 }
 
 void MainWindow::refreshProcesses(){
-    //IDK how to go about displaying the names without an exe since FD names are completly different compared to exe names
+    //IDK how to go about displaying the names without an exe since FD names are completely different compared to exe names
     Processes p;
     std::list<std::string> exeNames;
     //std::list<std::string> namesWithoutExe;
-    std::future<std::list<std::string>> result;
+    //std::future<std::list<std::string>> result;
 
     try{
         exeNames = p.allProcessNamesWthExe();
@@ -190,29 +169,32 @@ void MainWindow::refreshProcesses(){
     }
 
     try{
-        //TODO Do something where is there is a difference in oldProcesses and exeNames do something to the map and not repopulate
-        populateMap(exeNames, p);
+        if(map.empty()){
+            populateMap(exeNames, p);
+        }
+        else{
+            resolveDifferences(exeNames, p);
+        }
     }
     catch(const std::exception& e){
         QMessageBox::critical(this, "Error:", e.what());
     }
     
-    if(oldMap.empty()){
+    if(!map.empty()){
         try{
             ui->processesTable->setRowCount(map.size());
             int i = 0;
-            for(const auto& name: exeNames){
+            for(const auto& pair: map){
                 std::vector<QTableWidgetItem*> items;
                 //Gotta loop through a vector or something of QTableWidgetItems
-                QString a = QString::fromStdString(name);
+                QString a = QString::fromStdString(pair.first);
                 QTableWidgetItem *displayedName = new QTableWidgetItem(a);
                 items.push_back(displayedName);
 
-                const auto& stats = map.at(name);
+                const auto& stats = pair.second;
                 auto cpuUsage = stats.getCpuUsage();
                 auto memoryUsage = stats.getMemoryUsage();
                 auto diskUsage = stats.getDiskUsage();
-                //map.erase(name);//stats is gone now DO NOT REFERENCE IT
 
                 if(auto val = std::get_if<double>(&cpuUsage)){
                     auto item = new QTableWidgetItem(QString::number(*val) + QString("%"));
@@ -247,10 +229,10 @@ void MainWindow::refreshProcesses(){
                 for(int k = 0; k < items.size(); ++k){
                     ui->processesTable->setItem(i, k, items.at(k));
                 }
-                //map.at(name) = std::move(stats);
                 i++;
             }
-            oldMap = std::move(map);
+            //oldMap = std::move(map);
+            //oldProcessList = std::move(exeNames);
         }
         catch(const std::runtime_error& e){
             QMessageBox::critical(this, "Error:", e.what());

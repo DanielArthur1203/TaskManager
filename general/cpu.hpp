@@ -7,6 +7,7 @@
 #include <string>
 #include <array>
 #include <variant>
+#include <stdexcept>
 
 class Cpu{
     private:
@@ -30,6 +31,7 @@ class Cpu{
         //Returns the CPU usage of a individual process
         double processUsage(DWORD pid);
         //Returns the CPU usage of all processes that have the same exe name as the given PID
+        void processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
         void processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage);
         //Returns CPU clock speed in GHz by multiplying the usage ratio by the base speed
         double cpuClockSpeed();

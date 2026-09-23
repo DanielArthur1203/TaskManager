@@ -331,7 +331,8 @@ double Disk::processDiskUsage(DWORD pid){
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
 
     if(h == NULL){
-        throw std::runtime_error(processes.formattedError("Opening Process " + pid));
+        std::string errorMsg = processes.formattedError("Opening Process " + pid);
+        throw std::runtime_error(errorMsg);
     }
 
     IO_COUNTERS counters;
@@ -339,7 +340,8 @@ double Disk::processDiskUsage(DWORD pid){
 
     if(!(GetProcessIoCounters(h, &counters))){
         CloseHandle(h);
-        throw std::runtime_error(processes.formattedError("Getting IO Counters For Process " + pid));
+        std::string errorMsg = processes.formattedError("Getting IO Counters For Process " + pid);
+        throw std::runtime_error(errorMsg);
     }
 
     auto bytesRead1 = counters.ReadTransferCount;
@@ -350,7 +352,8 @@ double Disk::processDiskUsage(DWORD pid){
 
     if(!(GetProcessIoCounters(h, &counters))){
         CloseHandle(h);
-        throw std::runtime_error(processes.formattedError("Getting IO Counters For Process " + pid));
+        std::string errorMsg = processes.formattedError("Getting IO Counters For Process " + pid);
+        throw std::runtime_error(errorMsg);
     }
 
     auto bytesRead2 = counters.ReadTransferCount;
@@ -395,7 +398,7 @@ double Disk::allProcessNameDiskUsage(DWORD pid){
     return usage;
 }
 
-void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage){
+void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
     std::list<std::future<double>> results;
 
     for(const auto& pid: pids){
@@ -406,6 +409,54 @@ void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double,
             }));
         }
         catch(const std::runtime_error& e){
+            ptr = std::current_exception();
+            //throw std::runtime_error(e.what());
+        }
+    }
+
+    bool setDouble = false;
+    for(auto& result: results){
+        if(auto type = std::get_if<double>(&usage)){
+            try{
+                if(!setDouble){
+                    usage = 0.0;
+                    setDouble = true;
+                }
+                *type += result.get();
+            }
+            catch(std::runtime_error& e){
+                ptr = std::current_exception();
+            }
+        }
+        else{
+            if(!setDouble){
+                usage = 0.0;
+                setDouble = true;
+            }
+
+            try{
+                std::get<double>(usage) += result.get(); //idk it's increasing erroneously 
+            }
+            catch(std::runtime_error& e){
+                ptr = std::current_exception();
+            }
+        }
+    }
+
+}
+
+void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string> &usage){
+    std::list<std::future<double>> results;
+
+    for(const auto& pid: pids){
+        try{
+            DWORD id = pid;
+            results.push_back(std::async(std::launch::async, [this, id](){
+                return processDiskUsage(id);
+            }));
+        }
+        catch(const std::runtime_error& e){
+            //ptr = std::current_exception();
             throw std::runtime_error(e.what());
         }
     }
@@ -419,5 +470,4 @@ void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double,
             std::get<double>(usage) += result.get();
         }
     }
-
 }

@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 #include <variant>
+#include <stdexcept>
 
 class Disk{
     private:
@@ -50,6 +51,7 @@ class Disk{
         See the comment for processDiskUsage for inflated values
         */
         double allProcessNameDiskUsage(DWORD pid);
+        void allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
         void allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage);
 };
 

@@ -13,6 +13,7 @@
 #include <numeric>
 #include <future>
 #include <list>
+#include <iostream>
 
 using namespace std::chrono;
 
@@ -159,7 +160,7 @@ double Cpu::processUsage(DWORD pid){
     return usage;
 }
 
-void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage){
+void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
     //double usage = 0;
 
     std::wstring singleName = processes.getNameFromPID(pid);
@@ -178,17 +179,78 @@ void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string>& us
             if(msg.contains("5")){
                 continue;
             }
+            ptr = std::current_exception();
+            //throw std::runtime_error(msg);
+        }
+    }
+    bool setDouble = false;
+    for(auto it = results.begin(); it != results.end(); ++it){
+        if(auto type = std::get_if<double>(&usage)){
+            if(!setDouble){
+                usage = 0.0;
+                setDouble = true;
+            }
+
+            try{
+                *type += it->get();
+            }
+            catch(std::runtime_error& e){
+                ptr = std::current_exception();
+            }
+        }
+        else{
+            if(!setDouble){
+                usage = 0.0;
+                setDouble = true;
+            }
+            try{
+                std::get<double>(usage) += it->get(); //idk it's increasing erroneously 
+            }
+            catch(std::runtime_error& e){
+                ptr = std::current_exception();
+            }
+        }
+        //usage += it->get();
+    }
+    if(auto type = std::get_if<double>(&usage)){
+        *type = std::round(*type * 10) / 10;
+    }
+    //usage = std::round(usage * 10) / 10;
+    //return usage;
+}
+
+void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string> &usage){
+    std::wstring singleName = processes.getNameFromPID(pid);
+    std::vector<DWORD> allPIDS = processes.getPIDFromName(singleName);
+    std::list<std::future<double>> results;
+
+    for(auto it = allPIDS.begin(); it != allPIDS.end(); ++it){
+        try{
+            DWORD id = *it;
+            results.push_back(std::async(std::launch::async, [this, id](){
+                return processUsage(id);
+            }));
+        } 
+        catch(std::runtime_error& e){
+            std::string msg = e.what();
+            if(msg.contains("5")){
+                continue;
+            }
+            //ptr = std::current_exception();
             throw std::runtime_error(msg);
         }
     }
-
+    bool setDouble = false;
     for(auto it = results.begin(); it != results.end(); ++it){
         if(auto type = std::get_if<double>(&usage)){
             *type += it->get();
         }
         else{
-            usage = 0.0;
-            std::get<double>(usage) += it->get();
+            if(!setDouble){
+                usage = 0.0;
+                setDouble = true;
+            }
+            std::get<double>(usage) += it->get(); //idk it's increasing erroneously 
         }
         //usage += it->get();
     }
