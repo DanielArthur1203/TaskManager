@@ -25,8 +25,10 @@ LPCSTR Processes::wStringToString(std::wstring &string){
 std::wstring Processes::fullPathFromPID(DWORD pid){
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
 
-    if(h == INVALID_HANDLE_VALUE){
-        throw std::runtime_error(formattedError("Opening Process" + pid));
+    if(h == NULL){
+        std::string start = "Opening Process" + pid;
+        std::string msg = formattedError(start);
+        throw std::runtime_error(msg);
     }
 
     std::wstring name(MAX_PATH, 0);
@@ -34,7 +36,8 @@ std::wstring Processes::fullPathFromPID(DWORD pid){
 
     if(!(QueryFullProcessImageNameW(h, 0, name.data(), &size))){
         CloseHandle(h);
-        throw std::runtime_error(formattedError("Getting Full Path Name For Process" + pid));
+        std::string msg = formattedError("Getting Full Path Name For Process" + pid);
+        throw std::runtime_error(msg);
     }
     CloseHandle(h);
     return name;

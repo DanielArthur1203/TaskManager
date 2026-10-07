@@ -30,6 +30,76 @@ LPCSTR Disk::wstrToLPCSTR(std::wstring &string){
     return str.c_str();
 }
 
+unsigned long long Disk::fileTimeToULL(const FILETIME &ft){
+    return (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+}
+
+ProcessDiskSample Disk::processDiskSampleReformed(DWORD pid){
+    double usage = 0;
+    double readUsage = 0;
+    double writeUsage = 0;
+    ProcessDiskSample sample;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+
+    if(h == NULL){
+        std::string errorMsg = processes.formattedError("Opening Process " + pid);
+        throw std::runtime_error(errorMsg);
+    }
+
+    IO_COUNTERS counters;
+    ZeroMemory(&counters, sizeof(counters));
+
+    if(!(GetProcessIoCounters(h, &counters))){
+        CloseHandle(h);
+        std::string errorMsg = processes.formattedError("Getting IO Counters For Process " + pid);
+        throw std::runtime_error(errorMsg);
+    }
+
+    FILETIME creation, exit, kernel, user;
+
+    if(!(GetProcessTimes(h, &creation, &exit, &kernel, &user))){
+        CloseHandle(h);
+        std::string errorMsg = processes.formattedError("Getting Process Times For Process " + pid);
+        throw std::runtime_error(errorMsg);
+    }
+
+
+    auto bytesRead1 = counters.ReadTransferCount;
+    auto bytesWritten1 = counters.WriteTransferCount;
+
+    sample.totalActivity = bytesRead1 + bytesWritten1;
+    sample.creationTime = fileTimeToULL(creation);
+    sample.sampledAtMs = GetTickCount64();
+    CloseHandle(h);
+    return sample;
+}
+
+bool Disk::sampleProcessUsage(DWORD pid, double &usage){
+    const ProcessDiskSample current = processDiskSampleReformed(pid);
+
+    auto it = previousSamples.find(pid);
+
+    if(it == previousSamples.end() || it->second.creationTime != current.creationTime){
+        previousSamples[pid] = current;
+        return false;
+    }
+
+    const ProcessDiskSample previous = it->second;
+    it->second = current;
+
+    const auto elapsedMs = current.sampledAtMs - previous.sampledAtMs;
+    if(elapsedMs == 0 || current.totalActivity < previous.totalActivity){
+        return false;
+    }
+
+    const double elapsedSeconds = elapsedMs / 1000.0;
+    const double bytesPerSecond =
+        (current.totalActivity - previous.totalActivity) / elapsedSeconds;
+
+    usage = bytesPerSecond / (1024.0 * 1024.0); // MiB/s
+    return true;
+}
+
 std::vector<std::wstring> Disk::diskNames(){
     std::vector<std::wstring> names;
 
@@ -399,50 +469,27 @@ double Disk::allProcessNameDiskUsage(DWORD pid){
 }
 
 void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
-    std::list<std::future<double>> results;
-
+    bool hasAny = false;
+    double total = 0;
     for(const auto& pid: pids){
         try{
-            DWORD id = pid;
-            results.push_back(std::async(std::launch::async, [this, id](){
-                return processDiskUsage(id);
-            }));
+            double pidUsage = 0.0;
+            if(sampleProcessUsage(pid, pidUsage)){
+                total += pidUsage;
+                hasAny = true;
+            }
         }
-        catch(const std::runtime_error& e){
+        catch(...){
             ptr = std::current_exception();
-            //throw std::runtime_error(e.what());
         }
     }
 
-    bool setDouble = false;
-    for(auto& result: results){
-        if(auto type = std::get_if<double>(&usage)){
-            try{
-                if(!setDouble){
-                    usage = 0.0;
-                    setDouble = true;
-                }
-                *type += result.get();
-            }
-            catch(std::runtime_error& e){
-                ptr = std::current_exception();
-            }
-        }
-        else{
-            if(!setDouble){
-                usage = 0.0;
-                setDouble = true;
-            }
-
-            try{
-                std::get<double>(usage) += result.get(); //idk it's increasing erroneously 
-            }
-            catch(std::runtime_error& e){
-                ptr = std::current_exception();
-            }
-        }
-    }
-
+    if(hasAny){
+        usage = std::round(total * 10.0) / 10.0;
+   }
+   else{
+        usage = "N/A";
+   }
 }
 
 void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string> &usage){

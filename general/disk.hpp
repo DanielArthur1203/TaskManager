@@ -6,12 +6,24 @@
 #include <vector>
 #include <variant>
 #include <stdexcept>
+#include <unordered_map>
+
+struct ProcessDiskSample{
+    unsigned long long totalActivity;
+    unsigned long long creationTime;
+    ULONGLONG sampledAtMs; 
+};
 
 class Disk{
     private:
         Processes processes;
         LPCSTR wstrToLPCSTR(std::wstring& string);
         std::vector<std::wstring> names;
+        std::unordered_map<DWORD, ProcessDiskSample> previousSamples;
+
+        unsigned long long fileTimeToULL(const FILETIME& ft);
+        ProcessDiskSample processDiskSampleReformed(DWORD pid);
+        bool sampleProcessUsage(DWORD pid, double& usage);
     public:
         Disk(){
             processes = Processes();

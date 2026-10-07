@@ -12,6 +12,8 @@ class GPU{
         std::vector<LUID> luids;
         //Returns all adapter LUIDs
         std::vector<LUID> getLuids();
+
+        LPCSTR wstrToLPCSTR(std::wstring& string);
     public:
         GPU(){
             processes = Processes();
@@ -32,6 +34,7 @@ class GPU{
         std::unordered_map<uint64_t, double> VRAM();
         //Returns a map where each LUID is matched to its shared VRAM total
         std::unordered_map<uint64_t, double> sharedVRAM();
+        double singleProcessUsage(DWORD pid);
 };
 
 

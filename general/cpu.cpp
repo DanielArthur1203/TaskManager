@@ -66,8 +66,8 @@ std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> Cpu::getProcessorInfo(){
     return infoVec;
 }
 
-unsigned long long Cpu::getSnap(DWORD pid){
-    unsigned long long usage = 0;
+ProcessCpuSample Cpu::getSnap(DWORD pid){
+    ProcessCpuSample sample;
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
     
     if(h == NULL){
@@ -83,9 +83,38 @@ unsigned long long Cpu::getSnap(DWORD pid){
         throw std::runtime_error(errorMsg);
     }
 
-    usage += fileTimeToULL(kernel) + fileTimeToULL(user);
+    sample.totalCpuTime = fileTimeToULL(kernel) + fileTimeToULL(user);
+    sample.creationTime = fileTimeToULL(creation);
+    sample.sampledAtMs = GetTickCount64();
     CloseHandle(h);
-    return usage;
+    return sample;
+}
+
+bool Cpu::sampleProcessUsage(DWORD pid, double &usage){
+   const ProcessCpuSample current = getSnap(pid);
+   auto it = previousSamples.find(pid);
+
+   if(it == previousSamples.end() || it->second.creationTime != current.creationTime){
+        previousSamples[pid] = current;
+        return false;
+   }
+
+   const ProcessCpuSample previous = it->second;
+   it->second = current;
+
+   const auto elapsedMs = current.sampledAtMs - previous.sampledAtMs;
+   if(elapsedMs == 0 || current.totalCpuTime < previous.totalCpuTime){
+        return false;
+   }
+
+   const auto cpuDelta = current.totalCpuTime - previous.totalCpuTime;
+
+    usage = static_cast<double>(cpuDelta)
+          / (static_cast<double>(elapsedMs) * 10000.0);
+    usage = usage / processorCount() * 100.0;
+    usage = std::round(usage * 100.0) / 100.0;
+
+    return true;
 }
 
 double Cpu::currentUsage(){
@@ -123,100 +152,68 @@ double Cpu::currentUsage(){
 }
 
 double Cpu::processUsage(DWORD pid){
-    double usage = 0;
+    double usage = 3;
     
-    unsigned long long snap1 = 0;
+    // unsigned long long snap1 = 0;
 
-    try{
-        snap1 = getSnap(pid);
-    }
-    catch(std::runtime_error& e){
-        throw std::runtime_error(e.what());
-    }
+    // try{
+    //     snap1 = getSnap(pid);
+    // }
+    // catch(std::runtime_error& e){
+    //     throw std::runtime_error(e.what());
+    // }
 
-    ULONGLONG time1 = GetTickCount64();
+    // ULONGLONG time1 = GetTickCount64();
 
-    std::this_thread::sleep_for(seconds(1));
+    // std::this_thread::sleep_for(seconds(1));
 
-    unsigned long long snap2 = 0;
+    // unsigned long long snap2 = 0;
 
-    try{
-        snap2 = getSnap(pid);
-    }
-    catch(std::runtime_error& e){
-        throw std::runtime_error(e.what());
-    }
+    // try{
+    //     snap2 = getSnap(pid);
+    // }
+    // catch(std::runtime_error& e){
+    //     throw std::runtime_error(e.what());
+    // }
 
-    ULONGLONG time2 = GetTickCount64();
+    // ULONGLONG time2 = GetTickCount64();
 
-    ULONGLONG tDelta = time2 - time1;
+    // ULONGLONG tDelta = time2 - time1;
 
-    auto snapDelta = snap2 - snap1;
+    // auto snapDelta = snap2 - snap1;
 
-    usage = static_cast<double>((snapDelta / (tDelta * 10000.0)));
-    usage /= processorCount();
-    usage *= 100;
-    usage = std::round(usage * 100) / 100;
+    // usage = static_cast<double>((snapDelta / (tDelta * 10000.0)));
+    // usage /= processorCount();
+    // usage *= 100;
+    // usage = std::round(usage * 100) / 100;
     return usage;
 }
 
-void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
-    //double usage = 0;
-
-    std::wstring singleName = processes.getNameFromPID(pid);
-    std::vector<DWORD> allPIDS = processes.getPIDFromName(singleName);
-    std::list<std::future<double>> results;
-
-    for(auto it = allPIDS.begin(); it != allPIDS.end(); ++it){
+void Cpu::processNameTotalUsage(std::vector<DWORD>& pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
+    bool hasAny = false;
+    double total = 0;
+    for(const auto& pid: pids){
         try{
-            DWORD id = *it;
-            results.push_back(std::async(std::launch::async, [this, id](){
-                return processUsage(id);
-            }));
-        } 
-        catch(std::runtime_error& e){
-            std::string msg = e.what();
-            if(msg.contains("5")){
-                continue;
+            double pidUsage = 0.0;
+            if(sampleProcessUsage(pid, pidUsage)){
+                total += pidUsage;
+                hasAny = true;
             }
+        }
+        catch(const std::exception& e){
             ptr = std::current_exception();
-            //throw std::runtime_error(msg);
+        }
+        catch(...){
+            ptr = std::current_exception();
         }
     }
-    bool setDouble = false;
-    for(auto it = results.begin(); it != results.end(); ++it){
-        if(auto type = std::get_if<double>(&usage)){
-            if(!setDouble){
-                usage = 0.0;
-                setDouble = true;
-            }
 
-            try{
-                *type += it->get();
-            }
-            catch(std::runtime_error& e){
-                ptr = std::current_exception();
-            }
-        }
-        else{
-            if(!setDouble){
-                usage = 0.0;
-                setDouble = true;
-            }
-            try{
-                std::get<double>(usage) += it->get(); //idk it's increasing erroneously 
-            }
-            catch(std::runtime_error& e){
-                ptr = std::current_exception();
-            }
-        }
-        //usage += it->get();
-    }
-    if(auto type = std::get_if<double>(&usage)){
-        *type = std::round(*type * 10) / 10;
-    }
-    //usage = std::round(usage * 10) / 10;
-    //return usage;
+   if(hasAny){
+        usage = std::round(total * 10.0) / 10.0;
+   }
+   else{
+        usage = "N/A";
+   }
 }
 
 void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string> &usage){

@@ -8,10 +8,18 @@
 #include <array>
 #include <variant>
 #include <stdexcept>
+#include <unordered_map>
+
+struct ProcessCpuSample{
+    unsigned long long totalCpuTime;
+    unsigned long long creationTime;
+    ULONGLONG sampledAtMs;
+};
 
 class Cpu{
     private:
         Processes processes;
+        std::unordered_map<DWORD, ProcessCpuSample> previousSamples;
 
         //Helper that converts FILETIME fields to unsigned long long
         unsigned long long fileTimeToULL(const FILETIME& ft);
@@ -20,7 +28,8 @@ class Cpu{
         //Helper that returns vector of structs holder processor information
         std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> getProcessorInfo();
         //Helper that returns a snapshot of a processes CPU usage by its PID
-        unsigned long long getSnap(DWORD pid);
+        ProcessCpuSample getSnap(DWORD pid);
+        bool sampleProcessUsage(DWORD pid, double& usage);
     public:
         Cpu(){
             processes = Processes();
@@ -31,7 +40,7 @@ class Cpu{
         //Returns the CPU usage of a individual process
         double processUsage(DWORD pid);
         //Returns the CPU usage of all processes that have the same exe name as the given PID
-        void processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
+        void processNameTotalUsage(std::vector<DWORD>& pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
         void processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage);
         //Returns CPU clock speed in GHz by multiplying the usage ratio by the base speed
         double cpuClockSpeed();

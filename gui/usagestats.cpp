@@ -5,37 +5,6 @@
 
 using namespace std::chrono;
 
-UsageStats::UsageStats(int pid, bool isPPL){
-    if(isPPL){
-        data->cpuUsage = "N/A";
-        data->memoryUsage = "N/A";
-        data->diskUsage = "N/A";
-    }
-    else{
-        try{
-            this->pid = pid;
-            //higher than it should be fml
-            startCPUsageReport(this->pid);
-            startMemoryUsageReport(this->pids);
-            startDiskUsageReport(this->pids);
-            //memoryUsage = memory->getNamePhysicalMemoryUsage(pid);
-            //diskUsage = disk->allProcessNameDiskUsage(pid);
-        }
-        catch(const std::runtime_error& e){
-            std::string msg = e.what();
-            if(!msg.contains("5")){ //Win32 Error Access Denied. Comes from PP-L Processes with a exe name
-                throw std::runtime_error(e.what());
-            }
-            data->cpuUsage = "N/A";
-            data->memoryUsage = "N/A";
-            data->diskUsage = "N/A";
-        }
-        catch(const std::exception& e){
-            throw std::runtime_error(e.what());
-        }
-    }
-}
-
 UsageStats::UsageStats(int pid, bool isPPL, std::vector<DWORD>& pids){
     if(isPPL){
         data->cpuUsage = "N/A";
@@ -44,14 +13,8 @@ UsageStats::UsageStats(int pid, bool isPPL, std::vector<DWORD>& pids){
     }
     else{
         try{
-            this->pid = pid;
-            this->pids = pids;
-            startCPUsageReport(this->pid);
-            //checkSharedException();
-            startMemoryUsageReport(this->pids);
-            startDiskUsageReport(this->pids);
-            //memoryUsage = memory->getNamePhysicalMemoryUsage(pid);
-            //diskUsage = disk->allProcessNameDiskUsage(pid);
+            data->pid = pid;
+            data->pids = pids;
         }
         catch(const std::runtime_error& e){
             std::string msg = e.what();
@@ -65,36 +28,25 @@ UsageStats::UsageStats(int pid, bool isPPL, std::vector<DWORD>& pids){
         catch(const std::exception& e){
             throw std::runtime_error(e.what());
         }
+        UsageStatsDaemon::instance().registerHolder(data);
     }
 }
 
 UsageStats::UsageStats(UsageStats &&other) noexcept{
-    std::scoped_lock lock(other.mtx, other.mtx2, other.mtx3);
-
-    sharedException = other.sharedException;
-    other.sharedException = nullptr;
-
-    report = std::move(other.report);
-    memoryReport = std::move(other.memoryReport);
-    diskReport = std::move(other.diskReport);
-
-    pid = std::move(other.pid);
-    pids = std::move(other.pids);
+    data = std::move(other.data);
+    sharedException = std::move(other.sharedException);
     cpu = std::move(other.cpu);
     memory = std::move(other.memory);
     disk = std::move(other.disk);
-
-    data->cpuUsage = std::move(other.data->cpuUsage);
-    data->memoryUsage = std::move(other.data->memoryUsage);
-    data->diskUsage = std::move(other.data->diskUsage);
 }
 
 UsageStats &UsageStats::operator=(UsageStats &&other) noexcept{
     if(this != &other){
         data = std::move(other.data);
-        report = std::move(other.report);
-        memoryReport = std::move(other.memoryReport);
-        diskReport = std::move(other.diskReport);
+        sharedException = std::move(other.sharedException);
+        cpu = std::move(other.cpu);
+        memory = std::move(other.memory);
+        disk = std::move(other.disk);
     }
     return *this;
 
@@ -102,136 +54,177 @@ UsageStats &UsageStats::operator=(UsageStats &&other) noexcept{
 
 UsageStats::~UsageStats(){
     qDebug() << "Object killed";
-    stopThreads();
 }
 
-void UsageStats::startCPUsageReport(int pid){
-    //report = std::jthread(&UsageStats::cpuReportStartHelper, this, pid);
-    auto ptr = this->data;
-    report = std::jthread([ptr, pid, this](std::stop_token tok){
-        try{
-            while(!tok.stop_requested()){
-                {
-                    std::lock_guard<std::mutex> lock(ptr->mtx);
-                    this->cpu->processNameTotalUsage(pid, ptr->cpuUsage, std::ref(sharedException));
-                }
-
-                if (tok.stop_requested()) break;
-
-                for (int i = 0; i < 20; ++i) {
-                    if (tok.stop_requested()) break;
-                    std::this_thread::sleep_for(milliseconds(50));
-                }
-            }
-        }
-        catch(const std::runtime_error& e){
-            if(!std::string(e.what()).contains("5")){
-                throw std::runtime_error(e.what());
-            }
-        }
-        catch(const std::exception& e){
-            throw std::runtime_error(e.what());
-        }
-    });
+const std::variant<double, std::string> UsageStats::getCpuUsage() const noexcept{
+    {
+        std::lock_guard lock(data->mtx);
+        return data->cpuUsage;
+    }
 }
 
-void UsageStats::startMemoryUsageReport(std::vector<DWORD> pids){
-    //memoryReport = std::jthread(&UsageStats::memoryReportStartHelper, this, pids);
-    auto ptr = this->data;
-    memoryReport = std::jthread([ptr, pids, this](std::stop_token tok){
-        try{
-            while(!tok.stop_requested()){
-                {
-                    std::lock_guard<std::mutex> lock(ptr->mtx2);
-                    this->memory->getNamePhysicalMemoryUsage(pids, ptr->memoryUsage, std::ref(sharedException));
-                }
-                if (tok.stop_requested()) break;
-
-                for (int i = 0; i < 20; ++i) {
-                    if (tok.stop_requested()) break;
-                    std::this_thread::sleep_for(milliseconds(50));
-                }
-            }
-        }
-        catch(const std::runtime_error& e){
-            if(!std::string(e.what()).contains("5")){
-                throw std::runtime_error(e.what());
-            }
-        }
-        catch(const std::exception& e){
-            throw std::runtime_error(e.what());
-        }
-    });
+const std::variant<double, std::string> UsageStats::getMemoryUsage() const noexcept{
+    {
+        std::lock_guard lock(data->mtx2);
+        return data->memoryUsage;
+    }
 }
 
-void UsageStats::startDiskUsageReport(std::vector<DWORD> pids){
-    //diskReport = std::jthread(&UsageStats::diskReportStartHelper, this, pids);
-    auto ptr = this->data;
-    diskReport = std::jthread([ptr, pids, this](std::stop_token tok){
-        try{
-            while(!tok.stop_requested()){
-                {
-                    std::lock_guard<std::mutex> lock(ptr->mtx3);
-                    this->disk->allProcessNameDiskUsage(pids, ptr->diskUsage, std::ref(sharedException));
-                }
-                if (tok.stop_requested()) break;
-
-                for (int i = 0; i < 20; ++i) {
-                    if (tok.stop_requested()) break;
-                    std::this_thread::sleep_for(milliseconds(50));
-                }
-            }
-        }
-        catch(const std::runtime_error& e){
-            if(!std::string(e.what()).contains("5")){
-                throw std::runtime_error(e.what());
-            }
-        }
-        catch(const std::exception& e){
-            throw std::runtime_error(e.what());
-        }
-    });
+const std::variant<double, std::string> UsageStats::getDiskUsage() const noexcept{
+    {
+        std::lock_guard lock(data->mtx3);
+        return data->diskUsage;
+    }
 }
 
-void UsageStats::checkSharedException(){
-    if(sharedException){
+//New Daemon methods below
+//__________________________________________________________________________________________
+
+void UsageStatsDaemon::registerHolder(const std::shared_ptr<DataHolder> &data){
+    {
+        std::lock_guard lock(recordsMutex);
+
+        std::weak_ptr<DataHolder> weak(data);
+        holders.push_back(std::move(weak));
+    }
+}
+
+UsageStatsDaemon::~UsageStatsDaemon(){
+    scheduler.request_stop();
+
+    for(auto& worker: workers){
+        worker.request_stop();
+    }
+    cycleCondition.notify_all();
+
+    if(scheduler.joinable()){
+        scheduler.join();
+    }
+
+    for(auto& worker: workers){
+        if(worker.joinable()){
+            worker.join();
+        }
+    }
+}
+
+void UsageStatsDaemon::scheduleUpdate(std::stop_token stop){
+    while(!stop.stop_requested()){
+        auto live = getLiveHolders();
+
+        std::unique_lock lock(cycleMutex);
+        currentHolders = std::move(live);
+        ++cycle;
+        cycleCondition.notify_all();
+
+        cycleCondition.wait(lock, [&]{
+            return stop.stop_requested() || workersFinished == workers.size();
+        });
+
+        if(stop.stop_requested()){
+            break;
+        }
+        workersFinished = 0;
+        lock.unlock();
+        std::this_thread::sleep_for(milliseconds(250));
+    }
+}
+
+void UsageStatsDaemon::updateUsageStats(const std::shared_ptr<DataHolder> &data, Cpu& cpu, Disk& disk){
+    std::exception_ptr error = nullptr;
+    std::variant<double, std::string> cpuUsage = 0.0;
+    std::variant<double, std::string> memoryUsage = 0.0;
+    std::variant<double, std::string> diskUsage = 0.0;
+
+    cpu.processNameTotalUsage(data->pids, cpuUsage, error);
+
+    MemoryInfo memory;
+    memory.getNamePhysicalMemoryUsage(data->pids, memoryUsage, error);
+
+    disk.allProcessNameDiskUsage(data->pids, diskUsage, error);
+
+    {
+        std::scoped_lock lock(data->mtx, data->mtx2, data->mtx3);
+        data->cpuUsage = std::move(cpuUsage);
+        data->memoryUsage = std::move(memoryUsage);
+        data->diskUsage = std::move(diskUsage);
+    }
+
+    if(error){
         try{
-            std::rethrow_exception(sharedException);
+            std::rethrow_exception(error);
         }
         catch(const std::runtime_error& e){
             std::string msg = e.what();
             if(msg.contains("5") || msg.contains("87")){
-                stopThreads();
+                
             }
             else{
                 throw std::runtime_error(e.what());
             }
         }
         catch(const std::exception& e){
-            std::rethrow_exception(sharedException);
+            std::rethrow_exception(error);
         }
     }
 }
 
-void UsageStats::stopThreads(){
-    report.request_stop();
-    memoryReport.request_stop(); 
-    diskReport.request_stop();
+std::vector<std::shared_ptr<DataHolder>> UsageStatsDaemon::getLiveHolders(){
+    std::vector<std::shared_ptr<DataHolder>> live;
 
-    if (report.joinable()) report.join();
-    if (memoryReport.joinable()) memoryReport.join();
-    if (diskReport.joinable()) diskReport.join();
+    std::lock_guard lock(recordsMutex);
+
+    for(auto it = holders.begin(); it != holders.end();){
+        if(auto data = it->lock()){
+            live.push_back(std::move(data));
+            ++it;
+        }
+        else{
+            it = holders.erase(it);
+        }
+    }
+    return live;
 }
 
-const std::variant<double, std::string> UsageStats::getCpuUsage() const noexcept
-{
-    return data->cpuUsage;
-}
+void UsageStatsDaemon::workerLoop(std::stop_token stop, std::size_t index){
+    std::uint64_t last = 0;
+    Cpu cpu;
+    Disk disk;
+    while(!stop.stop_requested()){
+        std::vector<std::shared_ptr<DataHolder>> holdersForCycle;
 
-const std::variant<double, std::string> UsageStats::getMemoryUsage() const noexcept{
-    return data->memoryUsage;
-}
+        {
+            std::unique_lock lock(cycleMutex);
+            cycleCondition.wait(lock, [&]{
+                return stop.stop_requested() || cycle != last;
+            });
 
-const std::variant<double, std::string> UsageStats::getDiskUsage() const noexcept{
-    return data->diskUsage;
+            if(stop.stop_requested()){
+                return;
+            }
+
+            last = cycle;
+            holdersForCycle = currentHolders;
+        }
+        for(std::size_t i = index; i < holdersForCycle.size(); i += workers.size()){
+            try{
+                updateUsageStats(holdersForCycle.at(i), cpu, disk);
+            }
+            catch(const std::runtime_error& e){
+                qWarning() << "Update failed: " << e.what();
+            }
+            catch(const std::exception& e){
+                qWarning() << "Update failed with unknown exception";
+            }
+            catch(...){
+                qWarning() << "Unknown Error";
+            }
+        }
+        {
+            std::lock_guard lock(cycleMutex);
+            ++workersFinished;
+        }
+        cycleCondition.notify_all();
+    }
+
 }

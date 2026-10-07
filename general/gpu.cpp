@@ -10,6 +10,7 @@
 #include <thread>
 #include <format>
 #include <cmath>
+#include <PdhMsg.h>
 
 using namespace std::chrono;
 using namespace Microsoft::WRL;
@@ -41,6 +42,19 @@ std::vector<LUID> GPU::getLuids(){
     }
     fac->Release();
     return luids;
+}
+
+LPCSTR GPU::wstrToLPCSTR(std::wstring &string){
+    int size = WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), NULL, 0, NULL, NULL);
+
+    static thread_local std::string str;
+    str.assign(size, '\0');
+
+    if (size > 0) {
+        WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), str.data(), size, NULL, NULL);
+    }
+
+    return str.c_str();
 }
 
 std::vector<uint64_t> GPU::deviceIds(){
@@ -200,3 +214,37 @@ std::unordered_map<uint64_t, double> GPU::sharedVRAM(){
     return shared;
 }
 
+double GPU::singleProcessUsage(DWORD pid){
+    // double usage = 0;
+    // HQUERY query = NULL;
+
+    // PDH_STATUS status = PdhOpenQuery(NULL, 0, &query);
+    // if(status != ERROR_SUCCESS){
+    //     std::string msg = processes.formattedError("Opening Query For GPU Utilization", status);
+    //     throw std::runtime_error(msg);
+    // }
+
+    // std::wstring wildcardPath = L"\\GPU Engine(pid_" + std::to_wstring(pid) + L"_luid_0x*_phys_*_engine_*)\\Utilization Percentage";
+
+    // DWORD pathListSize = 0;
+    // std::string strPath = wstrToLPCSTR(wildcardPath);
+    // PDH_STATUS status = PdhExpandWildCardPath(NULL, strPath.c_str(), nullptr, &pathListSize, 0);
+    
+    // if (status == PDH_MORE_DATA || pathListSize > 0) {
+    //     std::vector<wchar_t> pathList(pathListSize);
+    //     status = PdhExpandWildCardPath(NULL, strPath.c_str(), pathList.data(), &pathListSize, 0);
+
+    //     if (status == ERROR_SUCCESS) {
+    //         wchar_t* currentPath = pathList.data();
+    //         while (*currentPath != L'\0') {
+    //             PDH_HCOUNTER counter;
+    //             if (PdhAddCounter(query, currentPath, 0, &counter) == ERROR_SUCCESS) {
+    //                 counters.push_back(counter);
+    //             }
+    //             currentPath += wcslen(currentPath) + 1;
+    //         }
+    //     }
+    // }
+    // return usage;
+    return 0.0;
+}

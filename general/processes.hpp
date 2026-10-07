@@ -29,15 +29,15 @@ class Processes{
             }
             return closedHere;
         }
+    public:
+        Processes(){};
+
         //Helper to convert wstring to string
         LPCSTR wStringToString(std::wstring &string);
         //Helper to get full exe path from a pid
         std::wstring fullPathFromPID(DWORD pid);
         //Helper to get a file descriptor(text not a number) from a full path
         std::wstring fileDescriptorName(std::wstring &fullPath);
-    public:
-        Processes(){};
-
         //Returns a vector of PROCESSENTRY32s for all active processes
         std::vector<PROCESSENTRY32> getAllActiveProcesses();
         //Returns a linked list of process names without their exe for all active processes
