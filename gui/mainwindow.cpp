@@ -128,6 +128,41 @@ void MainWindow::populateMap(std::list<std::string> &names, Processes& p){
     qDebug() << count << " objects made";
 }
 
+std::wstring MainWindow::displayNameRetrieval(DWORD pid, Processes &p){
+    std::wstring fullPath = L"";
+    try{
+        fullPath = p.fullPathFromPID(pid);
+    }
+    catch(const std::runtime_error& e){
+        std::string msg = e.what();
+        if(msg.contains("5")){
+            return L"PPL";
+        }
+        throw std::runtime_error(e.what());
+    }
+    catch(...){
+        auto exp = std::current_exception();
+        std::rethrow_exception(exp);
+    }
+
+    std::wstring displayName = L"";
+    try{
+        displayName = p.fileDescriptorName(fullPath);
+    }
+    catch(const std::runtime_error& e){
+        std::string msg = e.what();
+        if(msg.contains("5")){
+            return L"PPL";
+        }
+        throw std::runtime_error(e.what());
+    }
+    catch(...){
+        auto exp = std::current_exception();
+        std::rethrow_exception(exp);
+    }
+    return displayName;
+}
+
 void MainWindow::refreshProcesses(){
     Processes p;
     std::list<std::string> exeNames;
@@ -150,7 +185,6 @@ void MainWindow::refreshProcesses(){
         }
         else{
             resolveDifferences(exeNames, p);
-            needNameChange = true;
         }
     }
     catch(const std::exception& e){
@@ -163,8 +197,20 @@ void MainWindow::refreshProcesses(){
             int i = 0;
             for(const auto& pair: map){
                 std::vector<QTableWidgetItem*> items;
-                //Gotta loop through a vector or something of QTableWidgetItems
-                QString a = QString::fromStdString(pair.first);
+                QString a = "";
+                try{
+                    a = QString::fromStdWString(displayNameRetrieval(pair.second.getPid(), p));
+                }
+                catch(const std::runtime_error& e){
+                    a = QString::fromStdString(pair.first);
+                }
+                catch(...){
+                    QMessageBox::critical(this, "Unkown Error:", "Unexpected Error Occurred During Display Name Retrieval");
+                }
+
+                if(a.contains("PPL")){
+                    a = QString::fromStdString(pair.first);
+                }
                 QTableWidgetItem *displayedName = new QTableWidgetItem(a);
                 items.push_back(displayedName);
 
@@ -208,44 +254,11 @@ void MainWindow::refreshProcesses(){
                 }
                 i++;
             }
-            needNameChange = true;
-            //oldMap = std::move(map);
-            //oldProcessList = std::move(exeNames);
         }
         catch(const std::runtime_error& e){
             QMessageBox::critical(this, "Error:", e.what());
         }
     }
-
-    //don't loop through the whole table. use a stack or something to find what needs changing
-    // if(needNameChange){
-    //     int rowCount = ui->processesTable->rowCount();
-
-    //     for(int i = 0; i < rowCount; i++){
-    //         QTableWidgetItem* item = ui->processesTable->item(i, 0);
-
-    //         if(item){
-    //             QString exeName = item->text();
-    //             std::wstring stringExeName = exeName.toStdWString();
-
-    //             std::vector<DWORD> pids;
-    //             std::wstring pid;
-    //             std::wstring fdName;
-    //             try{
-    //                 pids = p.getPIDFromName(stringExeName);
-    //                 pid = p.fullPathFromPID(pids.at(0));
-    //                 fdName = p.fileDescriptorName(pid);
-    //             }
-    //             catch(const std::runtime_error& e){
-    //                 std::string msg = e.what();
-    //                 continue;
-    //             }
-    //             exeName = QString::fromStdWString(fdName);
-    //             item->setText(exeName);
-    //         }
-    //     }
-    //     needNameChange = false;
-    // }
 }
 
 void MainWindow::scrollStopped(){

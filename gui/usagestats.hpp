@@ -40,7 +40,7 @@ class UsageStatsDaemon{
         ~UsageStatsDaemon();
     private:
         inline UsageStatsDaemon(){
-            for(std::size_t i = 0; i < 20; ++i){
+            for(std::size_t i = 0; i < 19; ++i){
                 workers.emplace_back(
                     [this, i](std::stop_token stop){workerLoop(stop, i);}
                 );
@@ -85,6 +85,7 @@ class UsageStats{
         const std::variant<double, std::string> getCpuUsage() const noexcept;
         const std::variant<double, std::string> getMemoryUsage() const noexcept;
         const std::variant<double, std::string> getDiskUsage() const noexcept;
+        const int getPid() const noexcept;
 };
 
 #endif

@@ -77,6 +77,10 @@ const std::variant<double, std::string> UsageStats::getDiskUsage() const noexcep
     }
 }
 
+const int UsageStats::getPid() const noexcept{
+    return data->pid;
+}
+
 //New Daemon methods below
 //__________________________________________________________________________________________
 

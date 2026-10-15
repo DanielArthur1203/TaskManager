@@ -11,7 +11,6 @@
 #include <variant>
 #include <algorithm>
 #include <cctype>
-#include <stack>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -31,10 +30,6 @@ struct Comparison{
     }
 };
 
-struct PidHolder{
-    int pid = 0;
-};
-
 class MainWindow : public QMainWindow{
     Q_OBJECT
 
@@ -43,12 +38,10 @@ class MainWindow : public QMainWindow{
         ~MainWindow();
 
     private:
-        bool needNameChange = false;
         Ui::MainWindow *ui;
         QTimer *timer;
         QTimer *scrollTimer;
         std::map<std::string, UsageStats, Comparison> map;
-        std::stack<PidHolder> changeStack;
         //Gets what's new
         std::vector<std::string> getDifferences1(std::list<std::string>& names);
         //Gets what is old and should be deleted
@@ -56,6 +49,7 @@ class MainWindow : public QMainWindow{
         void resolveDifferences(std::list<std::string>& names, Processes& p);
         void populateMapHelper(std::string& name, Processes& p);
         void populateMap(std::list<std::string>& names, Processes& p);
+        std::wstring displayNameRetrieval(DWORD pid, Processes& p);
     private slots:
         void refreshProcesses();
         void scrollStopped();
