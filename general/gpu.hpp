@@ -1,40 +1,36 @@
 #ifndef GPU_HPP
 #define GPU_HPP
 
-#include "processes.hpp"
-#include <unordered_map>
+#include <windows.h>
+#include <winnt.h>
 #include <cstdint>
+#include <string>
 
 class GPU{
     private: 
-        Processes processes;
-        std::vector<uint64_t> ids;
-        std::vector<LUID> luids;
-        //Returns all adapter LUIDs
-        std::vector<LUID> getLuids();
-
-        LPCSTR wstrToLPCSTR(std::wstring& string);
+        uint64_t id;
+        LUID luid;
+        std::wstring name;
     public:
-        GPU(){
-            processes = Processes();
-            ids = deviceIds();
-            luids = getLuids();
-        }
-        //Returns all adapter LUIDs as a uint64_t
-        std::vector<uint64_t> deviceIds();
-        //Returns a map where each LUID is matched to its corresponding GPU utilization
-        std::unordered_map<uint64_t, double> utilization();
-        /*Returns a map where each LUID is matched to its VRAM total
+        GPU() = delete;
+        GPU(uint64_t id, LUID luid, std::wstring name) : id(id), luid(luid), name(name){};
 
-        Inaccurate(off by 500MB for me) since the VRAM value is what the OS determines is the cap for optimal performance
+        //Returns an ids corresponding GPU utilization
+        double utilization();
+        /*Returns VRAM total corresponding to LUID
+
+        Inaccurate since the VRAM value is what the OS determines is the cap for optimal performance
 
         Tried to find a way to get the accurate amount and was going to have a stroke since 
         DXGI_ADAPTER_DESC1 values are either way to small to be accurate or 0 for integrated graphics
         */
-        std::unordered_map<uint64_t, double> VRAM();
-        //Returns a map where each LUID is matched to its shared VRAM total
-        std::unordered_map<uint64_t, double> sharedVRAM();
+        double VRAM();
+        //Returns shared VRAM total corresponding to LUID
+        double sharedVRAM();
         double singleProcessUsage(DWORD pid);
+        const uint64_t& getId() const noexcept;
+        const LUID& getLuid() const noexcept;
+        const std::wstring& getName() const noexcept;
 };
 
 

@@ -552,3 +552,7 @@ const int Disk::getDiskCapacity() const noexcept{
 const DiskTypes &Disk::getDiskType() const noexcept{
     return Type;
 }
+
+const std::wstring &Disk::getManufacturerName() const noexcept{
+    return manufacturerName;
+}

@@ -32,6 +32,7 @@ class Disk{
         int diskNumber;
         unsigned int diskCapacity = 0;
         DiskTypes Type; //ran out of ways to say type
+        std::wstring manufacturerName = L""; 
 
         std::vector<std::wstring> names;
         std::unordered_map<DWORD, ProcessDiskSample> previousSamples;
@@ -56,9 +57,12 @@ class Disk{
             processes = Processes();
             names = diskNames();
         }
-        Disk(std::wstring name, int diskNumber): name(name), diskNumber(diskNumber){
+        Disk(std::wstring name, int diskNumber, std::wstring manufacturerName = L""): name(name), diskNumber(diskNumber){
             diskCapacity = capacity();
             Type = type();
+            if(manufacturerName != L"" && this->manufacturerName == L""){
+                this->manufacturerName = manufacturerName;
+            }
         };
         //Returns a vector containing all current disk names
         std::vector<std::wstring> diskNames();
@@ -88,6 +92,7 @@ class Disk{
         const std::wstring& getName() const noexcept;
         const int getDiskCapacity() const noexcept;
         const DiskTypes& getDiskType() const noexcept;
+        const std::wstring& getManufacturerName() const noexcept;
 };
 
 #endif

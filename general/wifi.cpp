@@ -44,158 +44,77 @@ std::string WiFi::phyToString(DOT11_PHY_TYPE &phy) noexcept{
     return "Unknown";
 }
 
-// void WiFi::toggleConnectionStats(MIB_TCPROW_OWNER_PID row, bool enable){
-//     TCP_BOOLEAN_OPTIONAL t;
-//     TCP_BOOLEAN_OPTIONAL f;
+double WiFi::sendRate(){
+    //std::unordered_map<unsigned long, double> rates;
+    double rates = 0;
+    double bPs = 0;
+    MIB_IF_ROW2 r1 = {0};
+    r1.InterfaceIndex = adapterIndex;
 
-//     auto size = sizeof(TCP_BOOLEAN_OPTIONAL);
-
-//     auto res = SetPerTcpConnectionEStats((PMIB_TCPROW)&row, TcpConnectionEstatsData,
-//         enable ? (PUCHAR)(TcpBoolOptEnabled) : (PUCHAR)(TcpBoolOptDisabled),
-//         0, 
-//         size,
-//         0);
-    
-//     if(res != NO_ERROR){
-//         throw std::runtime_error("Failed to Set TCP Connection Stats With iphlpapi code " + res);
-//     }
-// }
-
-// void WiFi::readConnectionBytes(MIB_TCPROW_OWNER_PID row, ULONG64 &bytesReceived, ULONG64 &bytesSent){
-//     bytesReceived = 0;
-//     bytesSent = 0;
-
-//     ULONG size = sizeof(TCP_ESTATS_DATA_ROD_v0);
-//     TCP_ESTATS_DATA_ROD_v0 rod = TCP_ESTATS_DATA_ROD_v0{};
-
-//     auto res = GetPerTcpConnectionEStats((PMIB_TCPROW)&row, 
-//         TcpConnectionEstatsData,
-//         NULL, 0, 0,
-//         NULL, 0, 0,
-//         (PUCHAR)&rod, 0, size);
-    
-//     if(res != NO_ERROR){
-//         throw std::runtime_error("Failed to Get TCP Connection Stats With iphlpapi code " + res);
-//     }
-
-//     bytesReceived = rod.DataBytesIn;
-//     bytesSent = rod.DataBytesOut;
-// }
-
-std::vector<unsigned long> WiFi::getAdapterIndices(){
-    std::vector<unsigned long> indices;
-    ULONG flags = GAA_FLAG_INCLUDE_PREFIX;
-    ULONG fam = AF_UNSPEC;
-    ULONG buff = 15000;
-
-    std::unique_ptr<IP_ADAPTER_ADDRESSES, void(*)(void*)> pAddresses(
-        static_cast<PIP_ADAPTER_ADDRESSES>(std::malloc(buff)), 
-        std::free
-    );
-    
-    if(!pAddresses){
-        throw std::runtime_error("Memory Allocation Failed");
+    DWORD res = GetIfEntry2(&r1);
+    if(res != NO_ERROR){
+        throw std::runtime_error("Send Rate Retrieval Failed With netioapi Code " + std::to_string(res));
     }
 
-    DWORD res = GetAdaptersAddresses(fam, flags, NULL, pAddresses.get(), &buff);
+    unsigned long long b1 = r1.OutOctets;
 
-    if(res == ERROR_BUFFER_OVERFLOW){
-        pAddresses.reset(static_cast<PIP_ADAPTER_ADDRESSES>(std::malloc(buff)));
+    auto start = steady_clock::now();
+    std::this_thread::sleep_for(seconds(1));
 
-        if(!pAddresses){
-            throw std::runtime_error("Memory Allocation Failed");
-        }
+    MIB_IF_ROW2 r2 = {0};
+    r2.InterfaceIndex = adapterIndex;
 
-        res = GetAdaptersAddresses(fam, flags, NULL, pAddresses.get(), &buff);
-    }
+    res = GetIfEntry2(&r2);
 
     if(res != NO_ERROR){
-        throw std::runtime_error("Getting Adapters Failed With iphlpapi Code " + res);
+        throw std::runtime_error("Send Rate Retrieval Failed With netioapi Code " + std::to_string(res));
     }
 
-    PIP_ADAPTER_ADDRESSES curr = pAddresses.get();
-    while(curr){
-        if(curr->IfType == IF_TYPE_IEEE80211 && curr->OperStatus == IfOperStatusUp){
-            indices.push_back(curr->IfIndex);
-        }
-        curr = curr->Next;
-    }
-    return indices;
-}
+    unsigned long long b2 = r2.OutOctets;
+    auto end = steady_clock::now();
 
-std::unordered_map<unsigned long, double> WiFi::sendRate(){
-    std::unordered_map<unsigned long, double> rates;
-
-    for(auto it = adapterIndices.begin(); it != adapterIndices.end(); ++it){
-        double bPs = 0;
-        MIB_IF_ROW2 r1 = {0};
-        r1.InterfaceIndex = *it;
-
-        DWORD res = GetIfEntry2(&r1);
-        if(res != NO_ERROR){
-            throw std::runtime_error("Send Rate Retrieval Failed With netioapi Code " + res);
-        }
-
-        unsigned long long b1 = r1.OutOctets;
-
-        auto start = steady_clock::now();
-        std::this_thread::sleep_for(seconds(1));
-
-        MIB_IF_ROW2 r2 = {0};
-        r2.InterfaceIndex = *it;
-
-        res = GetIfEntry2(&r2);
-
-        if(res != NO_ERROR){
-            throw std::runtime_error("Send Rate Retrieval Failed With netioapi Code " + res);
-        }
-
-        unsigned long long b2 = r2.OutOctets;
-        auto end = steady_clock::now();
-
-        duration<double> sec = end - start;
-        bPs = (b2 > b1) ? static_cast<double>((b2 - b1)) / sec.count() : 0;
-        bPs = std::round(bPs * 100) / 100;
-        rates.insert({*it, bPs * 8}); //bits to bytes
-    }
+    duration<double> sec = end - start;
+    bPs = (b2 > b1) ? static_cast<double>((b2 - b1)) / sec.count() : 0;
+    bPs = std::round(bPs * 100) / 100;
+    //rates.insert({*it, bPs * 8}); //bits to bytes
+    rates = bPs * 8;
     return rates;
 }
 
-std::unordered_map<unsigned long, double> WiFi::receiveRate(){
-    std::unordered_map<unsigned long, double> rates;
+double WiFi::receiveRate(){
+    //std::unordered_map<unsigned long, double> rates;
+    double rates = 0;
+    double bPs = 0;
+    MIB_IF_ROW2 r1 = {0};
+    r1.InterfaceIndex = adapterIndex;
 
-    for(auto it = adapterIndices.begin(); it != adapterIndices.end(); ++it){
-        double bPs = 0;
-        MIB_IF_ROW2 r1 = {0};
-        r1.InterfaceIndex = *it;
-
-        DWORD res = GetIfEntry2(&r1);
-        if(res != NO_ERROR){
-            throw std::runtime_error("Receive Rate Retrieval Failed With netioapi Code " + res);
-        }
-
-        unsigned long long b1 = r1.InOctets;
-
-        auto start = steady_clock::now();
-        std::this_thread::sleep_for(seconds(1));
-
-        MIB_IF_ROW2 r2 = {0};
-        r2.InterfaceIndex = *it;
-
-        res = GetIfEntry2(&r2);
-
-        if(res != NO_ERROR){
-            throw std::runtime_error("Receive Rate Retrieval Failed With netioapi Code " + res);
-        }
-
-        unsigned long long b2 = r2.InOctets;
-        auto end = steady_clock::now();
-
-        duration<double> sec = end - start;
-        bPs = (b2 > b1) ? static_cast<double>((b2 - b1)) / sec.count() : 0;
-        bPs = std::round(bPs * 100) / 100;
-        rates.insert({*it, bPs * 8}); //bits to bytes
+    DWORD res = GetIfEntry2(&r1);
+    if(res != NO_ERROR){
+        throw std::runtime_error("Receive Rate Retrieval Failed With netioapi Code " + std::to_string(res));
     }
+
+    unsigned long long b1 = r1.InOctets;
+
+    auto start = steady_clock::now();
+    std::this_thread::sleep_for(seconds(1));
+
+    MIB_IF_ROW2 r2 = {0};
+    r2.InterfaceIndex = adapterIndex;
+
+    res = GetIfEntry2(&r2);
+
+    if(res != NO_ERROR){
+        throw std::runtime_error("Receive Rate Retrieval Failed With netioapi Code " + std::to_string(res));
+    }
+
+    unsigned long long b2 = r2.InOctets;
+    auto end = steady_clock::now();
+
+    duration<double> sec = end - start;
+    bPs = (b2 > b1) ? static_cast<double>((b2 - b1)) / sec.count() : 0;
+    bPs = std::round(bPs * 100) / 100;
+    //rates.insert({*it, bPs * 8}); //bits to bytes
+    rates = bPs * 8;
     return rates;
 }
 
@@ -278,8 +197,9 @@ std::wstring WiFi::SSID(){
     return ssid;
 }
 
-std::unordered_map<unsigned long, std::string> WiFi::connectionType(){
-    std::unordered_map<unsigned long, std::string> types;
+std::string WiFi::connectionType(){
+    //std::unordered_map<unsigned long, std::string> types;
+    std::string returnType = "";
     ULONG flags = GAA_FLAG_INCLUDE_PREFIX;
     ULONG fam = AF_UNSPEC;
     ULONG buff = 15000;
@@ -306,70 +226,69 @@ std::unordered_map<unsigned long, std::string> WiFi::connectionType(){
     }
 
     if(res != NO_ERROR){
-        throw std::runtime_error("Getting Adapters Failed With iphlpapi Code " + res);
+        throw std::runtime_error("Getting Adapters Failed With iphlpapi Code " + std::to_string(res));
     }
 
     std::string adapterString = "";
-
-    for(auto it = adapterIndices.begin(); it != adapterIndices.end(); ++it){
-        PIP_ADAPTER_ADDRESSES pip = pAddresses.get();
-        while(pip){
-            if(pip->IfIndex == *it){
-                if(pip->IfType == IF_TYPE_IEEE80211){
-                    adapterString = pip->AdapterName;
-                    break;
-                }
-
+    PIP_ADAPTER_ADDRESSES pip = pAddresses.get();
+    while(pip){
+        if(pip->IfIndex == adapterIndex){
+            if(pip->IfType == IF_TYPE_IEEE80211){
+                adapterString = pip->AdapterName;
+                break;
             }
-            pip = pip->Next;
+
         }
-
-        if(adapterString.empty()){
-            throw std::runtime_error("Current Adapter Index Is Not A Wi-Fi Interface");
-        }
-
-        GUID g = GUID{};
-        std::wstring wideG(adapterString.begin(), adapterString.end());
-        HRESULT convertRes = CLSIDFromString(wideG.c_str(), &g);
-        if(convertRes != NOERROR){
-            throw std::runtime_error("Failed To Convert String" + convertRes);
-        }
-
-        DWORD version = 0;
-        HANDLE h;
-
-        if(WlanOpenHandle(2, NULL, &version, &h) != ERROR_SUCCESS){
-            throw std::runtime_error("Failed To Open WLAN Handle");
-        }
-
-        DWORD dwDataSize = 0;
-        PWLAN_CONNECTION_ATTRIBUTES pConnAttributes = PWLAN_CONNECTION_ATTRIBUTES{};
-        WLAN_OPCODE_VALUE_TYPE opCodeTypeValue;
-
-        res = WlanQueryInterface(
-            h, 
-            &g, 
-            wlan_intf_opcode_current_connection, 
-            NULL, 
-            &dwDataSize, 
-            (PVOID*)&pConnAttributes, 
-            &opCodeTypeValue
-        );
-
-        if(res == ERROR_SUCCESS && pConnAttributes != NULL){
-            std::string conTypeString = "";
-            DOT11_PHY_TYPE type = pConnAttributes->wlanAssociationAttributes.dot11PhyType;
-            conTypeString = phyToString(type);
-            types.insert({*it, conTypeString});
-        }
-
-        CloseHandle(h);
+        pip = pip->Next;
     }
-    return types;
+
+    if(adapterString.empty()){
+        throw std::runtime_error("Current Adapter Index Is Not A Wi-Fi Interface");
+    }
+
+    GUID g = GUID{};
+    std::wstring wideG(adapterString.begin(), adapterString.end());
+    HRESULT convertRes = CLSIDFromString(wideG.c_str(), &g);
+    if(convertRes != NOERROR){
+        throw std::runtime_error("Failed To Convert String" + convertRes);
+    }
+
+    DWORD version = 0;
+    HANDLE h;
+
+    if(WlanOpenHandle(2, NULL, &version, &h) != ERROR_SUCCESS){
+        throw std::runtime_error("Failed To Open WLAN Handle");
+    }
+
+    DWORD dwDataSize = 0;
+    PWLAN_CONNECTION_ATTRIBUTES pConnAttributes = PWLAN_CONNECTION_ATTRIBUTES{};
+    WLAN_OPCODE_VALUE_TYPE opCodeTypeValue;
+
+    res = WlanQueryInterface(
+        h, 
+        &g, 
+        wlan_intf_opcode_current_connection, 
+        NULL, 
+        &dwDataSize, 
+        (PVOID*)&pConnAttributes, 
+        &opCodeTypeValue
+    );
+
+    if(res == ERROR_SUCCESS && pConnAttributes != NULL){
+        std::string conTypeString = "";
+        DOT11_PHY_TYPE type = pConnAttributes->wlanAssociationAttributes.dot11PhyType;
+        conTypeString = phyToString(type);
+        //types.insert({*it, conTypeString});
+        returnType = conTypeString;
+    }
+
+    CloseHandle(h);
+    return returnType;
 }
 
-std::unordered_map<unsigned long, std::string> WiFi::ipV4Address(){
-    std::unordered_map<unsigned long, std::string> addresses;
+std::string WiFi::ipV4Address(){
+    //std::unordered_map<unsigned long, std::string> addresses;
+    std::string addressRet = "";
     PMIB_IPADDRTABLE table = NULL;
     DWORD size = 0;
 
@@ -384,25 +303,25 @@ std::unordered_map<unsigned long, std::string> WiFi::ipV4Address(){
 
     if(GetIpAddrTable(table, &size, 0) == ERROR_SUCCESS){
         for(int i = 0; i < table->dwNumEntries; i++){
-            for(auto it = adapterIndices.begin(); it != adapterIndices.end(); ++it){
-                std::string address(12, '\0');
+            std::string address(16, '\0');
 
-                if(table->table[i].dwIndex == *it){
-                    IN_ADDR addr;
-                    addr.S_un.S_addr = table->table[i].dwAddr;
+            if(table->table[i].dwIndex == adapterIndex){
+                IN_ADDR addr;
+                addr.S_un.S_addr = table->table[i].dwAddr;
 
-                    inet_ntop(AF_INET, &addr, address.data(), (socklen_t)address.size());
-                    addresses.insert({*it, address});
-                }
+                inet_ntop(AF_INET, &addr, address.data(), (socklen_t)address.size());
+                //addresses.insert({*it, address});
+                addressRet = address;
             }
         }
     }
     free(table);
-    return addresses;
+    return addressRet;
 }
 
-std::unordered_map<unsigned long, std::wstring> WiFi::ipV6Address(){
-    std::unordered_map<unsigned long, std::wstring> addresses;
+std::wstring WiFi::ipV6Address(){
+    //std::unordered_map<unsigned long, std::wstring> addresses;
+    std::wstring address = L"";
     ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
     ULONG size = 15000;
     std::vector<BYTE> buff(size);
@@ -416,26 +335,33 @@ std::unordered_map<unsigned long, std::wstring> WiFi::ipV6Address(){
     }
 
     if(res != NO_ERROR){
-        throw std::runtime_error("Failed With iphlpapi Error Code " + res);
+        throw std::runtime_error("Failed With iphlpapi Error Code " + std::to_string(res));
     }
 
     for(auto curr = pAddr; curr != NULL; curr = curr->Next){
-        for(auto it = adapterIndices.begin(); it != adapterIndices.end(); ++it){
-            if(curr->IfIndex == *it || curr->Ipv6IfIndex == *it){
-                for(auto uni = curr->FirstUnicastAddress; uni != NULL; uni = uni->Next){
-                    SOCKADDR* sock = uni->Address.lpSockaddr;
-                    if(sock && sock->sa_family == AF_INET6){
-                        sockaddr_in6* pSock = reinterpret_cast<sockaddr_in6*>(sock);
-                        std::wstring text(INET6_ADDRSTRLEN, '\0');
-                        InetNtopW(AF_INET6, &(pSock->sin6_addr), text.data(), INET6_ADDRSTRLEN);
+        if(curr->IfIndex == adapterIndex || curr->Ipv6IfIndex == adapterIndex){
+            for(auto uni = curr->FirstUnicastAddress; uni != NULL; uni = uni->Next){
+                SOCKADDR* sock = uni->Address.lpSockaddr;
+                if(sock && sock->sa_family == AF_INET6){
+                    sockaddr_in6* pSock = reinterpret_cast<sockaddr_in6*>(sock);
+                    std::wstring text(INET6_ADDRSTRLEN, '\0');
+                    InetNtopW(AF_INET6, &(pSock->sin6_addr), text.data(), INET6_ADDRSTRLEN);
 
-                        addresses.insert({*it, text + L"%" + std::to_wstring(*it)});
-                    }
+                    //addresses.insert({*it, text + L"%" + std::to_wstring(*it)});
+                    address = text + L"%" + std::to_wstring(adapterIndex);
                 }
             }
         }
     }
-    return addresses;
+    return address;
+}
+
+const unsigned long &WiFi::getAdapterIndexWiFi() const noexcept{
+    return adapterIndex;
+}
+
+const std::wstring &WiFi::getAdapterName() const noexcept{
+    return adapterName;
 }
 
 // double WiFi::processInternetUsage(DWORD pid){
@@ -454,7 +380,7 @@ std::unordered_map<unsigned long, std::wstring> WiFi::ipV6Address(){
 //     auto res = GetExtendedTcpTable(table.get(), &size, false, AF_INET, TCP_TABLE_OWNER_PID_CONNECTIONS, 0);
 
 //     if(res != NO_ERROR){
-//         throw std::runtime_error("Getting Extended TCP Table Failed With iphlpapi Code " + res);
+//         throw std::runtime_error("Getting Extended TCP Table Failed With iphlpapi Code " + std::to_string(res));
 //     }
 
 //     for(int i = 0; i < table->dwNumEntries; i++){

@@ -9,6 +9,8 @@
 class DiskFactory{
     private:
         std::vector<std::wstring> diskNames();
+        //Returns a vector of wstrings with all disk names
+        std::vector<std::wstring> diskManufacturerName();
     public:
         DiskFactory(){};
 
