@@ -198,6 +198,7 @@ void MainWindow::refreshProcesses(){
             for(const auto& pair: map){
                 std::vector<QTableWidgetItem*> items;
                 QString a = "";
+                //Messes with sorting but is a pain to fix(need to change difference retrieval)
                 try{
                     a = QString::fromStdWString(displayNameRetrieval(pair.second.getPid(), p));
                 }
@@ -207,7 +208,7 @@ void MainWindow::refreshProcesses(){
                 catch(...){
                     QMessageBox::critical(this, "Unkown Error:", "Unexpected Error Occurred During Display Name Retrieval");
                 }
-
+                
                 if(a.contains("PPL")){
                     a = QString::fromStdString(pair.first);
                 }
@@ -270,4 +271,12 @@ void MainWindow::handleScroll(){
         timer->stop();
     }
     scrollTimer->start();
+}
+
+void MainWindow::on_swapScreenButton1_clicked(){
+    ui->taskManagerStacked->setCurrentWidget(ui->page_2);
+}
+
+void MainWindow::on_swapScreenButton2_clicked(){
+    ui->taskManagerStacked->setCurrentWidget(ui->page);
 }

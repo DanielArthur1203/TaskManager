@@ -1,4 +1,5 @@
 #include "gpu.hpp"
+#include "general_functions.hpp"
 #include <windows.h>
 #include <pdh.h>
 #include <dxgi.h>
@@ -95,13 +96,13 @@ std::unordered_map<uint64_t, double> GPU::utilization(){
 
     PDH_STATUS status = PdhOpenQuery(NULL, 0, &q);
     if(status != ERROR_SUCCESS){
-        throw std::runtime_error(processes.formattedError("Opening Query For GPU Utilization", status));
+        throw std::runtime_error(GeneralFunctions::formattedError("Opening Query For GPU Utilization", status));
     }
 
     status = PdhAddCounterW(q, L"\\GPU Engine(*)\\Utilization Percentage", 0, &count);
     if(status != ERROR_SUCCESS){
         PdhCloseQuery(q);
-        throw std::runtime_error(processes.formattedError("Adding Counter For GPU Utilization", status));
+        throw std::runtime_error(GeneralFunctions::formattedError("Adding Counter For GPU Utilization", status));
     }
 
     PdhCollectQueryData(q);
@@ -220,7 +221,7 @@ double GPU::singleProcessUsage(DWORD pid){
 
     // PDH_STATUS status = PdhOpenQuery(NULL, 0, &query);
     // if(status != ERROR_SUCCESS){
-    //     std::string msg = processes.formattedError("Opening Query For GPU Utilization", status);
+    //     std::string msg = GeneralFunctions::formattedError("Opening Query For GPU Utilization", status);
     //     throw std::runtime_error(msg);
     // }
 

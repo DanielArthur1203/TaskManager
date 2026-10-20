@@ -6,6 +6,8 @@ add_library(taskmanager_general STATIC
     wifi.cpp
     gpu.cpp
     hardware.cpp
+    general_functions.hpp
+    disk_factory.cpp
 )
 
 target_include_directories(taskmanager_general

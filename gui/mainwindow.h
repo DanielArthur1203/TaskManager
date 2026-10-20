@@ -54,4 +54,6 @@ class MainWindow : public QMainWindow{
         void refreshProcesses();
         void scrollStopped();
         void handleScroll();
+        void on_swapScreenButton1_clicked();
+        void on_swapScreenButton2_clicked();
 };

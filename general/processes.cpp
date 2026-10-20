@@ -1,4 +1,5 @@
 #include "processes.hpp"
+#include "general_functions.hpp"
 #include <windows.h>
 #include <shellapi.h>
 #include <intsafe.h>
@@ -7,26 +8,14 @@
 #include <propkey.h>
 #include <stdexcept>
 
+using namespace GeneralFunctions;
 bool Processes::closed = false;
-
-LPCSTR Processes::wStringToString(std::wstring &string){
-    int size = WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), NULL, 0, NULL, NULL);
-
-    static thread_local std::string str;
-    str.assign(size, '\0');
-
-    if (size > 0) {
-        WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), str.data(), size, NULL, NULL);
-    }
-
-    return str.c_str();
-}
 
 std::wstring Processes::fullPathFromPID(DWORD pid){
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
 
     if(h == NULL){
-        std::string start = "Opening Process" + pid;
+        std::string start = "Opening Process" + std::to_string(pid);
         std::string msg = formattedError(start);
         throw std::runtime_error(msg);
     }
@@ -36,7 +25,7 @@ std::wstring Processes::fullPathFromPID(DWORD pid){
 
     if(!(QueryFullProcessImageNameW(h, 0, name.data(), &size))){
         CloseHandle(h);
-        std::string msg = formattedError("Getting Full Path Name For Process" + pid);
+        std::string msg = formattedError("Getting Full Path Name For Process" + std::to_string(pid));
         throw std::runtime_error(msg);
     }
     CloseHandle(h);
@@ -243,7 +232,7 @@ void Processes::closeWindowGUI(DWORD pid){
         HANDLE h = OpenProcess(SYNCHRONIZE, false, pid);
 
         if(h == NULL){
-            throw std::runtime_error(formattedError("Opening Process " + pid));
+            throw std::runtime_error(formattedError("Opening Process " + std::to_string(pid)));
         }
 
         DWORD res = WaitForSingleObject(h, 5000);
@@ -252,7 +241,7 @@ void Processes::closeWindowGUI(DWORD pid){
             h = OpenProcess(PROCESS_TERMINATE, false, pid);
 
             if(h == NULL){
-                throw std::runtime_error(formattedError("Opening Process " + pid));
+                throw std::runtime_error(formattedError("Opening Process " + std::to_string(pid)));
             }
 
             TerminateProcess(h, 1);
@@ -266,7 +255,7 @@ bool Processes::closeConsoleProcess(DWORD pid){
     bool res = false;
 
     if(!(AttachConsole(pid))){
-        throw std::runtime_error(formattedError("Attaching Console to Process " + pid));
+        throw std::runtime_error(formattedError("Attaching Console to Process " + std::to_string(pid)));
     }
 
     SetConsoleCtrlHandler(NULL, true);
@@ -276,7 +265,7 @@ bool Processes::closeConsoleProcess(DWORD pid){
     HANDLE h = OpenProcess(SYNCHRONIZE, false, pid);
 
     if(h == NULL){
-        throw std::runtime_error(formattedError("Opening Process " + pid));
+        throw std::runtime_error(formattedError("Opening Process " + std::to_string(pid)));
     }
 
     DWORD wait = WaitForSingleObject(h, 2000);
@@ -297,7 +286,7 @@ bool Processes::windowProcess(DWORD pid){
     bool answer = true;
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
     if(h == NULL){
-        throw std::runtime_error(formattedError("Opening Process " + pid));
+        throw std::runtime_error(formattedError("Opening Process " + std::to_string(pid)));
     }
 
     std::wstring exeName(MAX_PATH, 0);
@@ -305,7 +294,7 @@ bool Processes::windowProcess(DWORD pid){
 
     if(!QueryFullProcessImageNameW(h, 0, exeName.data(), &size)){
         CloseHandle(h);
-        throw std::runtime_error(formattedError("Querying Process Name For " + pid));
+        throw std::runtime_error(formattedError("Querying Process Name For " + std::to_string(pid)));
     }
     SHFILEINFOW s = SHFILEINFOW{};
     
@@ -330,76 +319,4 @@ bool Processes::windowProcess(DWORD pid){
     }
     CloseHandle(h);
     return answer;
-}
-
-std::string Processes::formattedError(std::string msg) noexcept{
-    std::string response = "";
-    DWORD errorNum;
-    int errorNumInt;
-    TCHAR sysMsg[256];
-    TCHAR *p;
-
-    errorNum = GetLastError( );
-    FormatMessage( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL, errorNum,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        sysMsg, 256, NULL );
-
-    // Trim the end of the line and terminate it with a null
-    p = sysMsg;
-    while( ( *p > 31 ) || ( *p == 9 ) )
-        ++p;
-    do { *p-- = 0; } while( ( p >= sysMsg ) && ( ( *p == '.' ) || ( *p < 33 ) ) );
-    
-
-    if(DWordToInt(errorNum, &errorNumInt) == INTSAFE_E_ARITHMETIC_OVERFLOW){
-        response = "Failed to generate error code";
-    }
-    else{
-        //idk how to get sysMsg in here without some hijinks
-        response += msg + " failed with error number " + std::to_string(errorNumInt);
-    }
-
-    return response;
-}
-
-std::string Processes::formattedError(std::string msg, PDH_STATUS errorCode) noexcept{
-    HMODULE hPdhLibrary = LoadLibraryA("pdh.dll");
-    if(hPdhLibrary == NULL){
-        DWORD loadErr = GetLastError();
-        return msg + " failed (couldn't load pdh.dll), error " + std::to_string(loadErr);
-    }
-
-    LPWSTR pMessage = NULL;
-
-    if(!FormatMessageW(FORMAT_MESSAGE_FROM_HMODULE |
-                    FORMAT_MESSAGE_ALLOCATE_BUFFER |
-                    FORMAT_MESSAGE_IGNORE_INSERTS,
-                    hPdhLibrary,
-                    static_cast<DWORD>(errorCode),
-                    0,
-                    (LPWSTR)&pMessage,
-                    0,
-                    NULL))
-    {
-        FreeLibrary(hPdhLibrary);
-        return msg + " failed with error number " + std::to_string(static_cast<DWORD>(errorCode));
-    }
-
-    // Convert wide string to UTF-8 std::string
-    std::string text;
-    int len = WideCharToMultiByte(CP_UTF8, 0, pMessage, -1, NULL, 0, NULL, NULL);
-    if(len > 0){
-        text.resize(len - 1);
-        WideCharToMultiByte(CP_UTF8, 0, pMessage, -1, &text[0], len, NULL, NULL);
-    }
-
-    LocalFree(pMessage);
-    FreeLibrary(hPdhLibrary);
-
-    if(text.empty()){
-        return msg + " failed with error number " + std::to_string(static_cast<DWORD>(errorCode));
-    }
-
-    return msg + " failed: " + text;
 }

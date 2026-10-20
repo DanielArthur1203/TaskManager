@@ -1,4 +1,5 @@
 #include "disk.hpp"
+#include "general_functions.hpp"
 #include <windows.h>
 #include <winioctl.h>
 #include <psapi.h>
@@ -9,11 +10,13 @@
 #include <wbemidl.h>
 #include <oleauto.h>
 #include <string>
+#include <string_view>
 #include <chrono>
 #include <thread>
 #include <cmath>
 #include <list>
 #include <future>
+#include <cwchar>
 
 using namespace std::chrono;
 
@@ -42,7 +45,7 @@ ProcessDiskSample Disk::processDiskSampleReformed(DWORD pid){
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
 
     if(h == NULL){
-        std::string errorMsg = processes.formattedError("Opening Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Opening Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -51,7 +54,7 @@ ProcessDiskSample Disk::processDiskSampleReformed(DWORD pid){
 
     if(!(GetProcessIoCounters(h, &counters))){
         CloseHandle(h);
-        std::string errorMsg = processes.formattedError("Getting IO Counters For Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Getting IO Counters For Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -59,7 +62,7 @@ ProcessDiskSample Disk::processDiskSampleReformed(DWORD pid){
 
     if(!(GetProcessTimes(h, &creation, &exit, &kernel, &user))){
         CloseHandle(h);
-        std::string errorMsg = processes.formattedError("Getting Process Times For Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Getting Process Times For Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -105,7 +108,7 @@ std::vector<std::wstring> Disk::diskNames(){
 
     DWORD count = GetLogicalDriveStringsW(0, NULL);
     if(count == 0){
-        throw std::runtime_error("Get Logical Drives");
+        throw std::runtime_error("Getting Logical Drives");
     }
 
     std::wstring buff(count, L'\0');
@@ -127,7 +130,7 @@ int Disk::diskNumberFromName(std::wstring &name){
         OPEN_EXISTING, 0, NULL);
     
     if(h == INVALID_HANDLE_VALUE){
-        throw std::runtime_error(processes.formattedError("Creating File For Disk Number"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Creating File For Disk Number"));
     }
 
     VOLUME_DISK_EXTENTS vol = VOLUME_DISK_EXTENTS{};
@@ -137,7 +140,7 @@ int Disk::diskNumberFromName(std::wstring &name){
         &vol, sizeof(vol), &bytes, NULL))){
         
         CloseHandle(h);
-        throw std::runtime_error(processes.formattedError("Getting Volume Disk For Disk Number"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Volume Disk For Disk Number"));
     }
 
     num = vol.Extents[0].DiskNumber;
@@ -145,8 +148,9 @@ int Disk::diskNumberFromName(std::wstring &name){
     return num;
 }
 
-std::unordered_map<std::wstring, unsigned int> Disk::activeTime(){
-    auto map = std::unordered_map<std::wstring, unsigned int>();
+unsigned int Disk::activeTime(){
+    // auto map = std::unordered_map<std::wstring, unsigned int>();
+    unsigned int active = 0;
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
     if(hres != 0){
         throw std::runtime_error("Failed with HRESULT code " + hres);
@@ -215,8 +219,10 @@ std::unordered_map<std::wstring, unsigned int> Disk::activeTime(){
         pclsObj->Get(L"Name", 0, &name, 0, 0);
         pclsObj->Get(L"PercentIdleTime", 0, &time, 0, 0);
         
-
-        map.insert({name.bstrVal, 100 - std::stoi(time.bstrVal)});
+        if(name.bstrVal && std::wstring_view(name.bstrVal) == this->name){
+            active = 100 - std::stoi(time.bstrVal);
+        }
+        //map.insert({name.bstrVal, 100 - std::stoi(time.bstrVal)});
 
         VariantClear(&name);
         VariantClear(&time);
@@ -227,171 +233,187 @@ std::unordered_map<std::wstring, unsigned int> Disk::activeTime(){
     pSvc->Release();
     pLoc->Release();
     CoUninitialize();
-    return map;
+    return active;
+    // return map;
 }
 
-std::unordered_map<std::wstring, double> Disk::readSpeed(){
-    std::unordered_map<std::wstring, double> speed;
+double Disk::readSpeed(){
+    //std::unordered_map<std::wstring, double> speed;
+    double speed = 0;
+    std::wstring nameCopy = name;
+    nameCopy.erase(2); //Each name is formatted as L"C:\\"
+    std::wstring path = L"\\\\.\\" + nameCopy;
+
+    HANDLE h = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, 
+        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+        0, NULL);
     
-    for(auto it = names.begin(); it != names.end(); ++it){
-        it->erase(2); //Each name is formatted as L"C:\\"
-        std::wstring path = L"\\\\.\\" + *it;
-
-        HANDLE h = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, 
-            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-            0, NULL);
-        
-        if(h == INVALID_HANDLE_VALUE){
-            throw std::runtime_error(processes.formattedError("Create File Handle"));
-        }
-
-        DISK_PERFORMANCE p = DISK_PERFORMANCE{};
-        DWORD bytesRet = 0;
-
-        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
-            CloseHandle(h);
-            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
-        }
-
-        unsigned long long b1 = p.BytesRead.QuadPart;
-
-        auto start = steady_clock::now();
-        std::this_thread::sleep_for(seconds(1));
-
-        p = DISK_PERFORMANCE{};
-        bytesRet = 0;
-
-        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
-            CloseHandle(h);
-            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
-        }
-
-        unsigned long long b2 = p.BytesRead.QuadPart;
-        auto end = steady_clock::now();
-
-        duration<double> sec = end - start;
-        double rate = static_cast<double>((b2 - b1)) / (sec.count());
-        speed.insert({*it, rate});
-        CloseHandle(h);
+    if(h == INVALID_HANDLE_VALUE){
+        throw std::runtime_error(GeneralFunctions::formattedError("Create File Handle"));
     }
+
+    DISK_PERFORMANCE p = DISK_PERFORMANCE{};
+    DWORD bytesRet = 0;
+
+    if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+        CloseHandle(h);
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Disk Performance"));
+    }
+
+    unsigned long long b1 = p.BytesRead.QuadPart;
+
+    auto start = steady_clock::now();
+    std::this_thread::sleep_for(seconds(1));
+
+    p = DISK_PERFORMANCE{};
+    bytesRet = 0;
+
+    if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+        CloseHandle(h);
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Disk Performance"));
+    }
+
+    unsigned long long b2 = p.BytesRead.QuadPart;
+    auto end = steady_clock::now();
+
+    duration<double> sec = end - start;
+    double rate = static_cast<double>((b2 - b1)) / (sec.count());
+    //speed.insert({name, rate});
+    speed = rate;
+    CloseHandle(h);
 
     return speed;
 }
 
-std::unordered_map<std::wstring, double> Disk::writeSpeed(){
-    std::unordered_map<std::wstring, double> speed;
+double Disk::writeSpeed(){
+    //std::unordered_map<std::wstring, double> speed;
+    double speed = 0;
+    std::wstring nameCopy = name;
+    nameCopy.erase(2); //Each name is formatted as L"C:\\"
+    std::wstring path = L"\\\\.\\" + nameCopy;
+
+    HANDLE h = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, 
+        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+        0, NULL);
     
-    for(auto it = names.begin(); it != names.end(); ++it){
-        it->erase(2); //Each name is formatted as L"C:\\"
-        std::wstring path = L"\\\\.\\" + *it;
-
-        HANDLE h = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, 
-            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-            0, NULL);
-        
-        if(h == INVALID_HANDLE_VALUE){
-            throw std::runtime_error(processes.formattedError("Create File Handle"));
-        }
-
-        DISK_PERFORMANCE p = DISK_PERFORMANCE{};
-        DWORD bytesRet = 0;
-
-        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
-            CloseHandle(h);
-            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
-        }
-
-        unsigned long long b1 = p.BytesWritten.QuadPart;
-
-        auto start = steady_clock::now();
-        std::this_thread::sleep_for(seconds(1));
-
-        p = DISK_PERFORMANCE{};
-        bytesRet = 0;
-
-        if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
-            CloseHandle(h);
-            throw std::runtime_error(processes.formattedError("Getting Disk Performance"));
-        }
-
-        unsigned long long b2 = p.BytesWritten.QuadPart;
-        auto end = steady_clock::now();
-
-        duration<double> sec = end - start;
-        double rate = static_cast<double>((b2 - b1)) / (sec.count());
-        speed.insert({*it, rate});
-        CloseHandle(h);
+    if(h == INVALID_HANDLE_VALUE){
+        throw std::runtime_error(GeneralFunctions::formattedError("Create File Handle"));
     }
+
+    DISK_PERFORMANCE p = DISK_PERFORMANCE{};
+    DWORD bytesRet = 0;
+
+    if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+        CloseHandle(h);
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Disk Performance"));
+    }
+
+    unsigned long long b1 = p.BytesWritten.QuadPart;
+
+    auto start = steady_clock::now();
+    std::this_thread::sleep_for(seconds(1));
+
+    p = DISK_PERFORMANCE{};
+    bytesRet = 0;
+
+    if(!(DeviceIoControl(h, IOCTL_DISK_PERFORMANCE, NULL, 0, &p, sizeof(p), &bytesRet, NULL))){
+        CloseHandle(h);
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Disk Performance"));
+    }
+
+    unsigned long long b2 = p.BytesWritten.QuadPart;
+    auto end = steady_clock::now();
+
+    duration<double> sec = end - start;
+    double rate = static_cast<double>((b2 - b1)) / (sec.count());
+    //speed.insert({*it, rate});
+    speed = rate;
+    CloseHandle(h);
 
     return speed;
 }
 
-std::unordered_map<std::wstring, double> Disk::responseTime(){
-    std::unordered_map<std::wstring, double> rTime;
-    
-    int i = 0;
-    for(auto it = names.begin(); it != names.end(); ++it){
-        PDH_HQUERY ph;
-        PDH_HCOUNTER hc;
-        PDH_FMT_COUNTERVALUE val;
+double Disk::responseTime(){
+    //std::unordered_map<std::wstring, double> rTime;
+    double rTime = 0;
+    PDH_HQUERY ph;
+    PDH_HCOUNTER hc;
+    PDH_FMT_COUNTERVALUE val;
 
-        it->erase(2); //Each name is formatted as L"C:\\"
-        PDH_STATUS status = PdhOpenQuery(NULL, 0, &ph);
-        if(status != ERROR_SUCCESS){
-            throw std::runtime_error(processes.formattedError("Opening Query For Disk", status));
-        }
+    std::wstring nameCopy = name;
+    nameCopy.erase(2); //Each name is formatted as L"C:\\"
+    PDH_STATUS status = PdhOpenQuery(NULL, 0, &ph);
+    if(status != ERROR_SUCCESS){
+        throw std::runtime_error(GeneralFunctions::formattedError("Opening Query For Disk", status));
+    }
 
-        std::wstring path = L"\\PhysicalDisk(" + std::to_wstring(i) + L" " + *it + L")\\Avg. Disk sec/Transfer";
-        LPCSTR ex = wstrToLPCSTR(path);
-        status = PdhAddCounter(ph, wstrToLPCSTR(path), 0, &hc);
-        if(status != ERROR_SUCCESS){
-            PdhCloseQuery(ph);
-            throw std::runtime_error(processes.formattedError("Adding Counter For Disk Rsp. Time", status));
-        }
-
-        PdhCollectQueryData(ph);
-        std::this_thread::sleep_for(seconds(1));
-        PdhCollectQueryData(ph);
-
-        status = PdhGetFormattedCounterValue(hc, PDH_FMT_DOUBLE, NULL, &val);
-        if(status != ERROR_SUCCESS){
-            PdhCloseQuery(ph);
-            throw std::runtime_error(processes.formattedError("Getting Disk Rsp. Counter Value", status));
-        }
-
-        rTime.insert({*it, val.doubleValue * 1000.0});
+    std::wstring path = L"\\PhysicalDisk(" + std::to_wstring(diskNumber) + L" " + nameCopy + L")\\Avg. Disk sec/Transfer";
+    LPCSTR ex = wstrToLPCSTR(path);
+    status = PdhAddCounter(ph, wstrToLPCSTR(path), 0, &hc);
+    if(status != ERROR_SUCCESS){
         PdhCloseQuery(ph);
-        i++;
+        throw std::runtime_error(GeneralFunctions::formattedError("Adding Counter For Disk Rsp. Time", status));
     }
+
+    PdhCollectQueryData(ph);
+    std::this_thread::sleep_for(seconds(1));
+    PdhCollectQueryData(ph);
+
+    status = PdhGetFormattedCounterValue(hc, PDH_FMT_DOUBLE, NULL, &val);
+    if(status != ERROR_SUCCESS){
+        PdhCloseQuery(ph);
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Disk Rsp. Counter Value", status));
+    }
+
+    //rTime.insert({*it, val.doubleValue * 1000.0});
+    rTime = val.doubleValue * 1000.0;
+    PdhCloseQuery(ph);
     return rTime;
 }
 
-std::unordered_map<std::wstring, unsigned int> Disk::capacity(){
-    std::unordered_map<std::wstring, unsigned int> capacity;
+unsigned int Disk::capacity(){
+    //std::unordered_map<std::wstring, unsigned int> capacity;
     
+    unsigned int capacity = 0;
+    ULARGE_INTEGER total;
 
-    for(auto it = names.begin(); it != names.end(); ++it){
-        ULARGE_INTEGER total;
-
-        if(!(GetDiskFreeSpaceExW(it->c_str(), NULL, &total, NULL))){
-            throw std::runtime_error(processes.formattedError("Getting Free Disk Space"));
-        }
-
-        unsigned int GiB = total.QuadPart / (1024 * 1024 * 1024);
-        capacity.insert({it->erase(2), GiB});
+    if(!(GetDiskFreeSpaceExW(name.c_str(), NULL, &total, NULL))){
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Free Disk Space"));
     }
+
+    unsigned int GiB = total.QuadPart / (1024 * 1024 * 1024);
+    //capacity.insert({it->erase(2), GiB});
+    capacity = GiB;
 
     return capacity;
 }
 
-std::unordered_map<std::wstring, int> Disk::type(){
-    std::unordered_map<std::wstring, int> type;
+DiskTypes Disk::type(){
+    //std::unordered_map<std::wstring, int> type;
+    int type = -1;
+    unsigned int a = GetDriveTypeA(wstrToLPCSTR(name));
+    //type.insert({it->erase(2), a});
+    type = a;
 
-    for(auto it = names.begin(); it != names.end(); ++it){
-        unsigned int a = GetDriveTypeA(wstrToLPCSTR(*it));
-        type.insert({it->erase(2), a});
+    switch(type){
+        case 0:
+            return DiskTypes::Unknown;
+        case 1:
+            return DiskTypes::NoRootDir;
+        case 2:
+            return DiskTypes::Removable;
+        case 3:
+            return DiskTypes::Fixed;
+        case 4:
+            return DiskTypes::Remote;
+        case 5:
+            return DiskTypes::CD_ROM;
+        case 6:
+            return DiskTypes::RAMDisk;
+        default:
+            return DiskTypes::Unknown;
     }
-    return type;
+    return DiskTypes::Unknown;
 }
 
 double Disk::processDiskUsage(DWORD pid){
@@ -401,7 +423,7 @@ double Disk::processDiskUsage(DWORD pid){
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
 
     if(h == NULL){
-        std::string errorMsg = processes.formattedError("Opening Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Opening Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -410,7 +432,7 @@ double Disk::processDiskUsage(DWORD pid){
 
     if(!(GetProcessIoCounters(h, &counters))){
         CloseHandle(h);
-        std::string errorMsg = processes.formattedError("Getting IO Counters For Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Getting IO Counters For Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -422,7 +444,7 @@ double Disk::processDiskUsage(DWORD pid){
 
     if(!(GetProcessIoCounters(h, &counters))){
         CloseHandle(h);
-        std::string errorMsg = processes.formattedError("Getting IO Counters For Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Getting IO Counters For Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -517,4 +539,16 @@ void Disk::allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double,
             std::get<double>(usage) += result.get();
         }
     }
+}
+
+const std::wstring &Disk::getName() const noexcept{
+    return name;
+}
+
+const int Disk::getDiskCapacity() const noexcept{
+    return diskCapacity;
+}
+
+const DiskTypes &Disk::getDiskType() const noexcept{
+    return Type;
 }

@@ -19,7 +19,7 @@ class Processes{
             auto res = GetWindowThreadProcessId(hwnd, &windowPid);
 
             if(!res){
-                throw std::runtime_error("Get Window Thread Process For Process " + pid);
+                throw std::runtime_error("Get Window Thread Process For Process " + std::to_string(pid));
             }
 
             if(windowPid == pid && GetWindow(hwnd, GW_OWNER) == NULL && IsWindowVisible(hwnd)){
@@ -32,8 +32,6 @@ class Processes{
     public:
         Processes(){};
 
-        //Helper to convert wstring to string
-        LPCSTR wStringToString(std::wstring &string);
         //Helper to get full exe path from a pid
         std::wstring fullPathFromPID(DWORD pid);
         //Helper to get a file descriptor(text not a number) from a full path
@@ -54,10 +52,6 @@ class Processes{
         bool closeConsoleProcess(DWORD pid);
         //Returns true if the process is a GUI process and false otherwise
         bool windowProcess(DWORD pid);
-        //Returns a string message of the last error returned by GetLastError
-        std::string formattedError(std::string msg) noexcept;
-        //Returns a string message for a PDH status code
-        std::string formattedError(std::string msg, PDH_STATUS errorCode) noexcept;
 };
 
 #endif

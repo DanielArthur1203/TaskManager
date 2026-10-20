@@ -8,6 +8,16 @@
 #include <stdexcept>
 #include <unordered_map>
 
+enum class DiskTypes{
+    Unknown = 0,
+    NoRootDir = 1,
+    Removable = 2,
+    Fixed = 3, //SSD/HDD
+    Remote = 4,
+    CD_ROM = 5,
+    RAMDisk = 6
+};
+
 struct ProcessDiskSample{
     unsigned long long totalActivity;
     unsigned long long creationTime;
@@ -18,40 +28,50 @@ class Disk{
     private:
         Processes processes;
         LPCSTR wstrToLPCSTR(std::wstring& string);
+        std::wstring name;
+        int diskNumber;
+        unsigned int diskCapacity = 0;
+        DiskTypes Type; //ran out of ways to say type
+
         std::vector<std::wstring> names;
         std::unordered_map<DWORD, ProcessDiskSample> previousSamples;
 
         unsigned long long fileTimeToULL(const FILETIME& ft);
         ProcessDiskSample processDiskSampleReformed(DWORD pid);
         bool sampleProcessUsage(DWORD pid, double& usage);
-    public:
-        Disk(){
-            processes = Processes();
-            names = diskNames();
-        }
-        //Returns a vector containing all current disk names
-        std::vector<std::wstring> diskNames();
-        //Returns a disks number from name
-        int diskNumberFromName(std::wstring& name);
-        //Returns a map where each disk is paired with it's percent active time
-        std::unordered_map<std::wstring, unsigned int> activeTime();
-        //Returns a map where each disk is paired with it's read speed in bytes/sec
-        std::unordered_map<std::wstring, double> readSpeed();
-        //Returns a map where each disk is paired with it's write speed in bytes/sec
-        std::unordered_map<std::wstring, double> writeSpeed();
-        //Returns a map where each disk is paired with it's response time in ms
-        std::unordered_map<std::wstring, double> responseTime();
-        /*Returns a map where each disk is paired with it's capacity in GiB
+        /*Returns a disks capacity in GiB
 
         Can be rather inaccurate since this method doesn't require elevated permissions 
         and will cap the total to whatever the user restriction is
         */
-        std::unordered_map<std::wstring, unsigned int> capacity();
-        /*Returns a map where each disk is paired with it's type
+        unsigned int capacity();
+        /*Returns an enum where it's type matches to the following
 
         0 -> Unknown, 1 -> No Root Dir, 2 -> Removable, 3 -> Fixed(SSD/HDD)
         4 -> Remote, 5 -> CD-ROM, 6 -> RAM disk*/
-        std::unordered_map<std::wstring, int> type();
+        DiskTypes type();
+    public:
+        //Don't use this one use the factory. Only used with a reason
+        Disk(){
+            processes = Processes();
+            names = diskNames();
+        }
+        Disk(std::wstring name, int diskNumber): name(name), diskNumber(diskNumber){
+            diskCapacity = capacity();
+            Type = type();
+        };
+        //Returns a vector containing all current disk names
+        std::vector<std::wstring> diskNames();
+        //Returns a disks number from name
+        int diskNumberFromName(std::wstring& name);
+        //Returns a disks percent active time
+        unsigned int activeTime();
+        //Returns a disks read speed in bytes/sec
+        double readSpeed();
+        //Returns a disks write speed in bytes/sec
+        double writeSpeed();
+        //Returns a disks response time in ms
+        double responseTime();
         /*Returns the disk usage of a specific process in MiB/sec
 
         The value returned is likely inflated in comparison to something like Task Manager
@@ -65,6 +85,9 @@ class Disk{
         double allProcessNameDiskUsage(DWORD pid);
         void allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
         void allProcessNameDiskUsage(std::vector<DWORD> pids, std::variant<double, std::string>& usage);
+        const std::wstring& getName() const noexcept;
+        const int getDiskCapacity() const noexcept;
+        const DiskTypes& getDiskType() const noexcept;
 };
 
 #endif

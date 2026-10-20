@@ -1,4 +1,5 @@
 #include "memory.hpp"
+#include "general_functions.hpp"
 #include <windows.h>
 #include <psapi.h>
 #include <tlhelp32.h>
@@ -45,14 +46,14 @@ unsigned long MemoryInfo::PDHQueryHelper(PDH_HQUERY &q, DWORD_PTR &dwP, LPCSTR p
             status = PdhCollectQueryData(q);
             if(status != ERROR_SUCCESS){
                 PdhCloseQuery(q);
-                std::string errMsg = processes.formattedError("Collecting Query Data", status);
+                std::string errMsg = GeneralFunctions::formattedError("Collecting Query Data", status);
                 throw std::runtime_error(errMsg);
             }
             std::this_thread::sleep_for(seconds(1));
             status = PdhCollectQueryData(q);
             if(status != ERROR_SUCCESS){
                 PdhCloseQuery(q);
-                std::string errorMsg = processes.formattedError("Collecting Query Data", status);
+                std::string errorMsg = GeneralFunctions::formattedError("Collecting Query Data", status);
                 throw std::runtime_error(errorMsg);
             }
 
@@ -65,22 +66,128 @@ unsigned long MemoryInfo::PDHQueryHelper(PDH_HQUERY &q, DWORD_PTR &dwP, LPCSTR p
             else{
                 PdhCloseQuery(q);
                 PdhRemoveCounter(pCounter);
-                std::string errorMsg = processes.formattedError("Getting Formatted Counter", status);
+                std::string errorMsg = GeneralFunctions::formattedError("Getting Formatted Counter", status);
                 throw std::runtime_error(errorMsg);
             }
         }
         else{
             PdhCloseQuery(q);
             PdhRemoveCounter(pCounter);
-            throw std::runtime_error(processes.formattedError("Adding Counter", status));
+            throw std::runtime_error(GeneralFunctions::formattedError("Adding Counter", status));
         }
         PdhRemoveCounter(pCounter);
     }
     else{
         PdhCloseQuery(q);
-        throw std::runtime_error(processes.formattedError("Query Opening", status));
+        throw std::runtime_error(GeneralFunctions::formattedError("Query Opening", status));
     }
     return cachedMem;
+}
+
+std::wstring MemoryInfo::memoryName(){
+    std::wstring name = L"";
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+
+    if(FAILED(hres)){
+        throw std::runtime_error("CoInitializeEx Failed For Getting Memory Name");
+    }
+
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
+
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator, NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (LPVOID*)&pLoc
+    );
+
+    IWbemServices* pSvc = NULL;
+    hres = pLoc->ConnectServer(
+        _bstr_t(L"ROOT\\CIMV2"),
+        NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc
+    );
+    pLoc->Release();
+
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(
+        _bstr_t(L"WQL"),
+        _bstr_t(L"SELECT Manufacturer, PartNumber FROM Win32_PhysicalMemory"),
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+        NULL, &pEnumerator
+    );
+
+    IWbemClassObject* pclsObj = NULL;
+    ULONG uReturn = 0;
+    while (pEnumerator) {
+        hres = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+        if (uReturn == 0) break;
+
+        VARIANT vtProp;
+        
+        VariantInit(&vtProp);
+        pclsObj->Get(L"Manufacturer", 0, &vtProp, 0, 0);
+        name += (vtProp.bstrVal ? vtProp.bstrVal : L"N/A");
+        VariantClear(&vtProp);
+
+        VariantInit(&vtProp);
+        pclsObj->Get(L"PartNumber", 0, &vtProp, 0, 0);
+        name += L" ";
+        name += (vtProp.bstrVal ? vtProp.bstrVal : L"N/A");
+        VariantClear(&vtProp);
+        pclsObj->Release();
+    }
+    pSvc->Release();
+    pEnumerator->Release();
+    CoUninitialize();
+    return name;
+}
+
+MemoryInfo::MemoryInfo(){
+    if(name == L""){
+        try{
+            name = memoryName();
+        }
+        catch(const std::runtime_error& e){
+            name = L"N/A(Name Retrieval Failed)";
+        }
+    }
+    if(type == ""){
+        try{
+            type = getRAMType();
+        }
+        catch(const std::runtime_error& e){
+            type = "Unknown(Error Occurred)";
+        }
+    }
+    if(usedSlots.index() == 0){
+        try{
+            usedSlots = getNumUsedRAMSlots();
+        }
+        catch(const std::runtime_error& e){
+            usedSlots = "N/A(Error Occurred)";
+        }
+    }
+    if(totalSlots.index() == 0){
+        try{
+            totalSlots = getTotalRAMSlots();
+        }
+        catch(const std::runtime_error& e){
+            totalSlots = "N/A";
+        }
+    }
+    if(speed.index() == 0){
+        try{
+            speed = getMemorySpeed();
+        }
+        catch(const std::runtime_error& e){
+            speed = "N/A(Error Occurred)";
+        }
+    }
 }
 
 double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
@@ -89,7 +196,7 @@ double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
         FALSE, pid);
 
     if(pHandle == NULL){
-        std::string errorMsg = processes.formattedError("Process Handle Opening");
+        std::string errorMsg = GeneralFunctions::formattedError("Process Handle Opening");
         throw std::runtime_error(errorMsg);
     }
 
@@ -101,7 +208,7 @@ double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
     }
     else{
         CloseHandle(pHandle);
-        std::string errorMsg = processes.formattedError("Memory Info Retrieval");
+        std::string errorMsg = GeneralFunctions::formattedError("Memory Info Retrieval");
         throw std::runtime_error(errorMsg);
     }
     memTotal = std::round(memTotal * 100) / 100;
@@ -204,7 +311,7 @@ double MemoryInfo::getPercentageMemoryUsage(){
     ULONGLONG totalMem = 0;
 
     if(!GetPhysicallyInstalledSystemMemory(&totalMem)){
-        throw std::runtime_error(processes.formattedError("Physical System Memory Retrieval"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Physical System Memory Retrieval"));
     }
 
     double currentUsage = getTotalPhysicalMemoryUsage();
@@ -254,7 +361,7 @@ double MemoryInfo::getSystemCommitLimit(){
         systemCommitLimit = std::round(systemCommitLimit * 10) / 10; //round by the 10s place
     }
     else{
-        throw std::runtime_error(processes.formattedError("Getting Global Memory Status"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Global Memory Status"));
     }
     return systemCommitLimit;
 }
@@ -271,7 +378,7 @@ double MemoryInfo::getCurrentCommitUsage(){
         currentCommit = std::round(currentCommit * 10) / 10;
     }
     else{
-        throw std::runtime_error(processes.formattedError("Getting Global Memory Status"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Global Memory Status"));
     }
     return currentCommit;
 }
@@ -285,7 +392,7 @@ unsigned long MemoryInfo::getPagedPool(){
         pagedPool = (pInfo.KernelPaged * pInfo.PageSize) / (1024 * 1024); //b to mb
     }
     else{
-        throw std::runtime_error(processes.formattedError("Getting Performance Info"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Performance Info"));
     }
     return pagedPool;
 }
@@ -299,9 +406,29 @@ unsigned long MemoryInfo::getNonPagedPool(){
         nonPagedPool = (pInfo.KernelNonpaged * pInfo.PageSize) / (1024 * 1024); //b to mb
     }
     else{
-        throw std::runtime_error(processes.formattedError("Getting Performance Info"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Getting Performance Info"));
     }
     return nonPagedPool;
+}
+
+std::wstring MemoryInfo::getName() const noexcept{
+    return name;
+}
+
+std::string MemoryInfo::getType() const noexcept{
+    return type;
+}
+
+const std::variant<std::monostate, unsigned short, std::string> &MemoryInfo::getUsedSlots() const noexcept{
+    return usedSlots;
+}
+
+const std::variant<std::monostate, unsigned short, std::string> &MemoryInfo::getTotalSlots() const noexcept{
+    return totalSlots;
+}
+
+const std::variant<std::monostate, unsigned long, std::string> &MemoryInfo::getSpeed() const noexcept{
+    return speed;
 }
 
 unsigned long MemoryInfo::getMemorySpeed(){
@@ -309,7 +436,7 @@ unsigned long MemoryInfo::getMemorySpeed(){
 
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
     if(hres != 0){
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     hres = CoInitializeSecurity(
@@ -327,7 +454,7 @@ unsigned long MemoryInfo::getMemorySpeed(){
     );
     if (hres != 0 || pLoc == NULL) {
         CoUninitialize();
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     // Use SysAllocString instead of _bstr_t for MinGW compatibility
@@ -339,7 +466,7 @@ unsigned long MemoryInfo::getMemorySpeed(){
     if (hres != 0 || pSvc == NULL) {
         pLoc->Release();
         CoUninitialize();
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     BSTR bstrLanguage = SysAllocString(L"WQL");
@@ -370,14 +497,14 @@ unsigned long MemoryInfo::getMemorySpeed(){
             pSvc->Release();
             pLoc->Release();
             CoUninitialize();
-            throw std::runtime_error("Failed with HRESULT code " + hres);
+            throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
         }
         pEnumerator->Release();
     }else{
         pSvc->Release();
         pLoc->Release();
         CoUninitialize();
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     pSvc->Release();
@@ -389,8 +516,8 @@ unsigned long MemoryInfo::getMemorySpeed(){
 unsigned short MemoryInfo::getNumUsedRAMSlots(){
     unsigned short usedSlots = 0;
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-    if(hres != 0){
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+    if(FAILED(hres)){
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     hres = CoInitializeSecurity(
@@ -422,7 +549,7 @@ unsigned short MemoryInfo::getNumUsedRAMSlots(){
     if (hres != 0 || pSvc == NULL) {
         pLoc->Release();
         CoUninitialize();
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     BSTR bstrLanguage = SysAllocString(L"WQL");
@@ -458,7 +585,7 @@ unsigned short MemoryInfo::getTotalRAMSlots(){
     unsigned short totalSlots = 0;
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
     if(hres != 0){
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     hres = CoInitializeSecurity(
@@ -483,7 +610,7 @@ unsigned short MemoryInfo::getTotalRAMSlots(){
     if (hres != 0 || pSvc == NULL) {
         pLoc->Release();
         CoUninitialize();
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     BSTR bstrLanguage = SysAllocString(L"WQL");
@@ -521,7 +648,7 @@ unsigned short MemoryInfo::getTotalRAMSlots(){
         pSvc->Release();
         pLoc->Release();
         CoUninitialize();
-        throw std::runtime_error("Failed with HRESULT code " + hres);
+        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
 
     pSvc->Release();

@@ -1,4 +1,5 @@
 #include "cpu.hpp"
+#include "general_functions.hpp"
 #include <windows.h>
 #include <winternl.h>
 #include <sysinfoapi.h>
@@ -13,7 +14,8 @@
 #include <numeric>
 #include <future>
 #include <list>
-#include <iostream>
+#include <intrin.h>
+#include <cstring>
 
 using namespace std::chrono;
 
@@ -52,14 +54,14 @@ std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> Cpu::getProcessorInfo(){
     
     //Meant to fail
     if((GetLogicalProcessorInformation(nullptr, &buffer))){
-        std::string errorMsg = processes.formattedError("Getting Buffer Size");
+        std::string errorMsg = GeneralFunctions::formattedError("Getting Buffer Size");
         throw std::runtime_error(errorMsg);
     }
 
     std::vector<SYSTEM_LOGICAL_PROCESSOR_INFORMATION> infoVec(buffer / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION));
 
     if(!(GetLogicalProcessorInformation(infoVec.data(), &buffer))){
-        std::string errorMsg = processes.formattedError("Getting Logical Processor Info");
+        std::string errorMsg = GeneralFunctions::formattedError("Getting Logical Processor Info");
         throw std::runtime_error(errorMsg);
     }
 
@@ -71,7 +73,7 @@ ProcessCpuSample Cpu::getSnap(DWORD pid){
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
     
     if(h == NULL){
-        std::string errorMsg = processes.formattedError("Opening Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Opening Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -79,7 +81,7 @@ ProcessCpuSample Cpu::getSnap(DWORD pid){
 
     if(!(GetProcessTimes(h, &creation, &exit, &kernel, &user))){
         CloseHandle(h);
-        std::string errorMsg = processes.formattedError("Getting Process Times For Process " + pid);
+        std::string errorMsg = GeneralFunctions::formattedError("Getting Process Times For Process " + std::to_string(pid));
         throw std::runtime_error(errorMsg);
     }
 
@@ -117,11 +119,40 @@ bool Cpu::sampleProcessUsage(DWORD pid, double &usage){
     return true;
 }
 
+std::string Cpu::cpuName() noexcept{
+    std::array<int, 4> info = {0};
+    char brandString[49] = {0};
+
+    __cpuid(info.data(), 0x80000000);
+    unsigned int exIds = info[0];
+
+    if(exIds > 0x80000004){
+        __cpuid(info.data(), 0x80000002);
+        std::memcpy(brandString, info.data(), sizeof(info));
+
+        __cpuid(info.data(), 0x80000003);
+        std::memcpy(brandString + 16, info.data(), sizeof(info));
+
+        __cpuid(info.data(), 0x80000004);
+        std::memcpy(brandString + 32, info.data(), sizeof(info));
+    }
+    else{
+        return "Unkown Processor";
+    }
+
+    std::string name(brandString);
+    auto first = name.find_first_not_of(" ");
+    if(first != std::string::npos){
+        name = name.substr(first);
+    }
+    return name;
+}
+
 double Cpu::currentUsage(){
     FILETIME idle, kernel, user;
 
     if(!GetSystemTimes(&idle, &kernel, &user)){
-        std::string errorMsg = processes.formattedError("Getting System Times");
+        std::string errorMsg = GeneralFunctions::formattedError("Getting System Times");
         throw std::runtime_error(errorMsg);
     }
     std::this_thread::sleep_for(seconds(1));
@@ -129,7 +160,7 @@ double Cpu::currentUsage(){
     FILETIME idle2, kernel2, user2;
 
     if(!GetSystemTimes(&idle2, &kernel2, &user2)){
-        std::string errorMsg = processes.formattedError("Getting System Times");
+        std::string errorMsg = GeneralFunctions::formattedError("Getting System Times");
         throw std::runtime_error(errorMsg);
     }
 
@@ -266,7 +297,7 @@ double Cpu::cpuClockSpeed(){
 
     PDH_STATUS status = PdhOpenQuery(nullptr, 0, &phQ);
     if(status != ERROR_SUCCESS){
-        std::string errorMsg = processes.formattedError("Query Opening", status);
+        std::string errorMsg = GeneralFunctions::formattedError("Query Opening", status);
         throw std::runtime_error(errorMsg);
     }
 
@@ -275,7 +306,7 @@ double Cpu::cpuClockSpeed(){
     status = PdhAddEnglishCounterW(phQ, counter, 0, &phC);
     if(status != ERROR_SUCCESS){
         PdhCloseQuery(phQ);
-        std::string errorMsg = processes.formattedError("Adding English Counter", status);
+        std::string errorMsg = GeneralFunctions::formattedError("Adding English Counter", status);
         throw std::runtime_error(errorMsg);
     }
 
@@ -283,7 +314,7 @@ double Cpu::cpuClockSpeed(){
     if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        std::string errorMsg = processes.formattedError("Collecting Query Data", status);
+        std::string errorMsg = GeneralFunctions::formattedError("Collecting Query Data", status);
         throw std::runtime_error(errorMsg);
     }
 
@@ -293,7 +324,7 @@ double Cpu::cpuClockSpeed(){
     if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        std::string errorMsg = processes.formattedError("Collecting Query Data", status);
+        std::string errorMsg = GeneralFunctions::formattedError("Collecting Query Data", status);
         throw std::runtime_error(errorMsg);
     }
 
@@ -304,7 +335,7 @@ double Cpu::cpuClockSpeed(){
     if(status != ERROR_SUCCESS){
         PdhRemoveCounter(phC);
         PdhCloseQuery(phQ);
-        std::string errorMsg = processes.formattedError("Formatting Counter Value", status);
+        std::string errorMsg = GeneralFunctions::formattedError("Formatting Counter Value", status);
         throw std::runtime_error(errorMsg);
     }
 
@@ -320,7 +351,7 @@ double Cpu::cpuClockSpeed(){
 unsigned int Cpu::processorCount(){
     unsigned int count = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
     if(count == 0){
-        throw std::runtime_error(processes.formattedError("Retrieving Active Processors"));
+        throw std::runtime_error(GeneralFunctions::formattedError("Retrieving Active Processors"));
     }
     return count;
 }
@@ -367,7 +398,7 @@ unsigned int Cpu::handleCount(){
             }
             else{
                 CloseHandle(handle);
-                throw std::runtime_error("Getting Handle Count For " + pid);
+                throw std::runtime_error("Getting Handle Count For " + std::to_string(pid));
             }
             CloseHandle(handle);
         }
@@ -456,6 +487,22 @@ unsigned short Cpu::coreCount(){
         }
     }
     return count;
+}
+
+std::string Cpu::getName() const noexcept{
+    return name;
+}
+
+unsigned short Cpu::getCores() const noexcept{
+    return cores;
+}
+
+const std::array<double, 3> Cpu::getCache() const noexcept{
+    return cache;
+}
+
+unsigned int Cpu::getProcessors() const noexcept{
+    return processors;
 }
 
 // bool Cpu::virtualizationState(){

@@ -12,10 +12,25 @@
 class MemoryInfo{
     private:
         Processes processes;
+        inline static std::wstring name = L"";
+        inline static std::string type = "";
+        inline static std::variant<std::monostate, unsigned short, std::string> usedSlots;
+        inline static std::variant<std::monostate, unsigned short, std::string> totalSlots;
+        inline static std::variant<std::monostate, unsigned long, std::string> speed;
 
         unsigned long PDHQueryHelper(PDH_HQUERY& q, DWORD_PTR& dwP, LPCSTR path);
+        //Returns a wstring containing installed memory name
+        std::wstring memoryName();
+        //Returns the installed RAM type
+        std::string getRAMType();
+        //Returns number of used RAM slots
+        unsigned short getNumUsedRAMSlots();
+        //Returns total number of RAM slots
+        unsigned short getTotalRAMSlots();
+        //Returns configured memory clock speed in MT/s
+        unsigned long getMemorySpeed();
     public:
-        MemoryInfo(){processes = Processes();};
+        MemoryInfo();
 
         //Returns private working set size of one process in MiB
         double getPhysicalMemoryUsage(const DWORD pid);
@@ -38,15 +53,11 @@ class MemoryInfo{
         unsigned long getPagedPool();
         //Returns non paged pool in MiB
         unsigned long getNonPagedPool();
-        //Returns configured memory clock speed in MT/s
-        unsigned long getMemorySpeed();
-        //Returns number of used RAM slots
-        unsigned short getNumUsedRAMSlots();
-        //Returns total number of RAM slots
-        unsigned short getTotalRAMSlots();
-        //Returns the installed RAM type
-        std::string getRAMType();
-
+        std::wstring getName() const noexcept;
+        std::string getType() const noexcept;
+        const std::variant<std::monostate, unsigned short, std::string>& getUsedSlots() const noexcept;
+        const std::variant<std::monostate, unsigned short, std::string>& getTotalSlots() const noexcept;
+        const std::variant<std::monostate, unsigned long, std::string>& getSpeed() const noexcept;
 };
 
 #endif

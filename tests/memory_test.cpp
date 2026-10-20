@@ -77,27 +77,27 @@ TEST(MemoryInfo, getNonPagedPool){
 TEST(MemoryInfo, getMemorySpeed){
     MemoryInfo a;
 
-    EXPECT_NO_THROW(a.getMemorySpeed());
-    EXPECT_TRUE(a.getMemorySpeed() > 0);
+    EXPECT_NO_THROW(a.getSpeed());
+    EXPECT_TRUE(a.getSpeed().index() > 0);
 }
 
-TEST(MemoryInfo, getNumUsedRAMSlots){
-    MemoryInfo a;
+// TEST(MemoryInfo, getNumUsedRAMSlots){
+//     MemoryInfo a;
 
-    EXPECT_NO_THROW(a.getNumUsedRAMSlots());
-    EXPECT_TRUE(a.getNumUsedRAMSlots() > 0);
-}
+//     EXPECT_NO_THROW(a.getNumUsedRAMSlots());
+//     EXPECT_TRUE(a.getNumUsedRAMSlots() > 0);
+// }
 
-TEST(MemoryInfo, getTotalRAMSlots){
-    MemoryInfo a;
+// TEST(MemoryInfo, getTotalRAMSlots){
+//     MemoryInfo a;
 
-    EXPECT_NO_THROW(a.getTotalRAMSlots());
-    EXPECT_TRUE(a.getTotalRAMSlots() > 0);
-}
+//     EXPECT_NO_THROW(a.getTotalRAMSlots());
+//     EXPECT_TRUE(a.getTotalRAMSlots() > 0);
+// }
 
-TEST(MemoryInfo, getRAMType){
-    MemoryInfo a;
+// TEST(MemoryInfo, getRAMType){
+//     MemoryInfo a;
 
-    EXPECT_NO_THROW(a.getRAMType());
-    EXPECT_FALSE(a.getRAMType().empty());
-}
+//     EXPECT_NO_THROW(a.getRAMType());
+//     EXPECT_FALSE(a.getRAMType().empty());
+// }

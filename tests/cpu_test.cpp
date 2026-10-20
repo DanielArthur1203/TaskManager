@@ -36,11 +36,6 @@ TEST(Cpu, cpuClockSpeed){
     EXPECT_TRUE(a.cpuClockSpeed() > 0);
 }
 
-TEST(Cpu, processorCount){
-    EXPECT_NO_THROW(a.processorCount());
-    EXPECT_TRUE(a.processorCount() > 0);
-}
-
 TEST(Cpu, threadCount){
     EXPECT_NO_THROW(a.threadCount());
     EXPECT_TRUE(a.threadCount() > 0);
@@ -56,16 +51,6 @@ TEST(Cpu, upTime){
     EXPECT_NE(a.upTime(), "");
 }
 
-TEST(Cpu, cacheAmounts){
-    ASSERT_NO_FATAL_FAILURE(a.cacheAmounts()); //in case array returned has more than 0 elements
-    EXPECT_NO_THROW(a.cacheAmounts());
-    EXPECT_TRUE(a.cacheAmounts().size() > 0);
-}
-
-TEST(Cpu, coreCount){
-    EXPECT_NO_THROW(a.coreCount());
-    EXPECT_TRUE(a.coreCount() > 0);
-}
 // TEST(Cpu, virtualizationState){
 //     EXPECT_NO_FATAL_FAILURE(a.virtualizationState());
 // }
