@@ -1,14 +1,21 @@
 #pragma once
 
 #include "usagestats.hpp"
+#include "../general/memory.hpp"
+#include "../general/disk_factory.hpp"
+#include "../general/wifi_factory.hpp"
+#include "../general/gpu_factory.hpp"
+#include <../general/cpu.hpp>
 #include <QMainWindow>
+#include <QTextEdit>
 #include <QTimer>
+#include <QFutureWatcher>
+#include <QString>
 #include <list>
 #include <string>
 #include <vector>
 #include <map>
 #include <memory>
-#include <variant>
 #include <algorithm>
 #include <cctype>
 
@@ -30,6 +37,24 @@ struct Comparison{
     }
 };
 
+struct Hardware{
+    GpuFactory gpuFac;
+    DiskFactory diskFac;
+    WifiFactory wifiFac;
+
+    Cpu cpu;
+    MemoryInfo memory;
+    std::vector<std::unique_ptr<Disk>> disks = diskFac.makeDisks();
+    std::vector<std::unique_ptr<GPU>> gpus = gpuFac.makeGPUs();
+    std::vector<std::unique_ptr<WiFi>> wifi = wifiFac.makeWiFi();
+};
+
+struct HardwareInitResult{
+    std::shared_ptr<Hardware> hardware;
+    QString err;
+
+};
+
 class MainWindow : public QMainWindow{
     Q_OBJECT
 
@@ -41,6 +66,8 @@ class MainWindow : public QMainWindow{
         Ui::MainWindow *ui;
         QTimer *timer;
         QTimer *scrollTimer;
+        QFutureWatcher<HardwareInitResult>* hardwareWatcher = nullptr;
+        std::shared_ptr<Hardware> hardware;
         std::map<std::string, UsageStats, Comparison> map;
         //Gets what's new
         std::vector<std::string> getDifferences1(std::list<std::string>& names);
@@ -50,6 +77,9 @@ class MainWindow : public QMainWindow{
         void populateMapHelper(std::string& name, Processes& p);
         void populateMap(std::list<std::string>& names, Processes& p);
         std::wstring displayNameRetrieval(DWORD pid, Processes& p);
+        void addTextBoxesToFrame();
+        std::vector<QTextEdit*> createTextBoxes(QFrame* frame);
+        QTextEdit* makeTextBox(const QString& s, QFrame* frame);
     private slots:
         void refreshProcesses();
         void scrollStopped();

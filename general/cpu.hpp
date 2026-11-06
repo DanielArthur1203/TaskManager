@@ -9,6 +9,7 @@
 #include <variant>
 #include <stdexcept>
 #include <unordered_map>
+#include <mutex>
 
 struct ProcessCpuSample{
     unsigned long long totalCpuTime;
@@ -20,11 +21,13 @@ class Cpu{
     private:
         Processes processes;
         std::unordered_map<DWORD, ProcessCpuSample> previousSamples;
+        inline static std::once_flag initFlag;
         inline static std::string name = "";
         inline static unsigned short cores = -1;
         inline static std::array<double, 3> cache = std::array<double,3>();
         inline static unsigned int processors = -1;
 
+        static void initialize(Cpu& cpu);
         //Helper that converts FILETIME fields to unsigned long long
         unsigned long long fileTimeToULL(const FILETIME& ft);
         //Helper that returns CPU base speed
@@ -44,18 +47,7 @@ class Cpu{
     public:
         Cpu(){
             processes = Processes();
-            if(name == ""){
-                name = cpuName();
-            }
-            if(cores == -1){
-                cores = coreCount();
-            }
-            if(cache.empty()){
-                cache = cacheAmounts();
-            }
-            if(processors == -1){
-                processors = processorCount();
-            }
+            initialize(*this);
         };
 
         //Returns percent CPU usage

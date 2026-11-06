@@ -6,6 +6,7 @@ add_library(taskmanager_core STATIC
 target_link_libraries(taskmanager_core
     PRIVATE
         Qt${QT_VERSION_MAJOR}::Widgets
+        Qt${QT_VERSION_MAJOR}::Charts
 )
 
 target_include_directories(taskmanager_core

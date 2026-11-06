@@ -4,26 +4,64 @@
 #include <QMessageBox>
 #include <QTableWidget>
 #include <QScrollBar>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QDebug>
 #include <algorithm>
-#include <cctype>
-#include <iterator>
 #include <future>
 #include <thread>
 #include <chrono>
 #include <unordered_set>
+#include <objbase.h>
+
+struct Killer{
+    ~Killer(){CoUninitialize();}
+};
 
 using namespace std::chrono;
 
 MainWindow::MainWindow(QWidget *parent): QMainWindow(parent), ui(new Ui::MainWindow){
     ui->setupUi(this);
+
+    hardwareWatcher = new QFutureWatcher<HardwareInitResult>(this);
+
+    connect(hardwareWatcher, &QFutureWatcher<HardwareInitResult>::finished,
+        this, [this]{
+            const auto res = hardwareWatcher->result();
+            if(!res.err.isEmpty()){
+                QMessageBox::critical(this, "Hardware info error", res.err);
+                return; 
+            }
+            hardware = res.hardware;
+            addTextBoxesToFrame();
+        }
+    );
+
+    hardwareWatcher->setFuture(QtConcurrent::run([]{
+        HardwareInitResult res;
+
+        const HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+        if(FAILED(hres)){
+            res.err = "COM init failed: " + QString::number(static_cast<unsigned long>(hres), 16);
+            return res;
+        }
+
+        Killer k;
+
+        try{
+            res.hardware = std::make_shared<Hardware>();
+        }
+        catch(const std::exception& e){
+            res.err = QString::fromLocal8Bit(e.what());
+        }
+        return res;
+    }));
     ui->processesTable->setColumnCount(4);
     ui->processesTable->verticalHeader()->setVisible(false);
     ui->processesTable->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     ui->processesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
     QStringList headers;
-    //Network is too stoke inducing to do since accurate values require kernel level access
+    //Network is too stroke inducing to do since accurate values require kernel level access
     headers << "Name" << "CPU" << "Memory" << "Disk";
     ui->processesTable->setHorizontalHeaderLabels(headers);
     refreshProcesses();
@@ -161,6 +199,62 @@ std::wstring MainWindow::displayNameRetrieval(DWORD pid, Processes &p){
         std::rethrow_exception(exp);
     }
     return displayName;
+}
+
+void MainWindow::addTextBoxesToFrame(){
+    QWidget *page = ui->taskManagerStacked->widget(1);
+    if(page){
+        QFrame *frame = page->findChild<QFrame*>("hardwareButtonFrame");
+        if(frame){
+            QVBoxLayout *layout = qobject_cast<QVBoxLayout*>(frame->layout());
+            if(!layout){
+                layout = new QVBoxLayout(frame);
+                frame->setLayout(layout);
+            }
+            auto textBoxes = createTextBoxes(frame);
+            for(const auto& box: textBoxes){
+                layout->addWidget(box);
+            }
+            // layout->addWidget(edit);
+        }
+    }
+}
+
+std::vector<QTextEdit *> MainWindow::createTextBoxes(QFrame* frame){
+    std::vector<QTextEdit *> textEdits;
+    //Do Cpu -> Memory ->Disks(done) -> Wifi -> Gpu
+    auto cpuText = makeTextBox(QString("CPU"), frame);
+    textEdits.push_back(cpuText);
+
+    auto memText = makeTextBox(QString("Memory"), frame);
+    textEdits.push_back(memText);
+
+    for(const auto& disk: hardware->disks){
+        std::wstring name = disk->getName();
+        name.erase(2);
+        std::wstring info = L"Disk " + std::to_wstring(disk->getDiskNumber()) + L"(" + name + L")";
+        auto text = makeTextBox(QString::fromStdWString(info), frame);
+        textEdits.push_back(text);
+    }
+
+    //Need to make Ethernet or other stuff say that name eventually
+    for(const auto& wifi: hardware->wifi){
+        auto text = makeTextBox(QString("Wifi"), frame);
+        textEdits.push_back(text);
+    }
+
+    for(const auto& gpu: hardware->gpus){
+        auto text = makeTextBox(QString("GPU"), frame);
+        textEdits.push_back(text);
+    }
+    return textEdits;
+}
+
+QTextEdit *MainWindow::makeTextBox(const QString &s, QFrame* frame){
+    auto text = new QTextEdit(frame);
+    text->setReadOnly(true);
+    text->setText(s);
+    return text;
 }
 
 void MainWindow::refreshProcesses(){

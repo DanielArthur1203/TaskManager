@@ -20,19 +20,6 @@
 
 using namespace std::chrono;
 
-LPCSTR Disk::wstrToLPCSTR(std::wstring &string){
-    int size = WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), NULL, 0, NULL, NULL);
-
-    static thread_local std::string str;
-    str.assign(size, '\0');
-
-    if (size > 0) {
-        WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), str.data(), size, NULL, NULL);
-    }
-
-    return str.c_str();
-}
-
 unsigned long long Disk::fileTimeToULL(const FILETIME &ft){
     return (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 }
@@ -152,7 +139,7 @@ unsigned int Disk::activeTime(){
     // auto map = std::unordered_map<std::wstring, unsigned int>();
     unsigned int active = 0;
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-    if(hres != 0){
+    if(FAILED(hres)){
         throw std::runtime_error("Failed with HRESULT code " + hres);
     }
 
@@ -169,7 +156,7 @@ unsigned int Disk::activeTime(){
         CLSCTX_INPROC_SERVER,
         IID_IWbemLocator, (void**)&pLoc
     );
-    if (hres != 0 || pLoc == NULL) {
+    if (FAILED(hres) || pLoc == NULL) {
         CoUninitialize();
         throw std::runtime_error("Failed with HRESULT code " + hres);
     }
@@ -180,7 +167,7 @@ unsigned int Disk::activeTime(){
     hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
     SysFreeString(bstrNamespace);
     
-    if (hres != 0 || pSvc == NULL) {
+    if (FAILED(hres) || pSvc == NULL) {
         pLoc->Release();
         CoUninitialize();
         throw std::runtime_error("Failed with HRESULT code " + hres);
@@ -348,8 +335,8 @@ double Disk::responseTime(){
     }
 
     std::wstring path = L"\\PhysicalDisk(" + std::to_wstring(diskNumber) + L" " + nameCopy + L")\\Avg. Disk sec/Transfer";
-    LPCSTR ex = wstrToLPCSTR(path);
-    status = PdhAddCounter(ph, wstrToLPCSTR(path), 0, &hc);
+    const std::string counterPath = GeneralFunctions::wStringToString(path);
+    status = PdhAddCounterA(ph, counterPath.c_str(), 0, &hc);
     if(status != ERROR_SUCCESS){
         PdhCloseQuery(ph);
         throw std::runtime_error(GeneralFunctions::formattedError("Adding Counter For Disk Rsp. Time", status));
@@ -391,7 +378,8 @@ unsigned int Disk::capacity(){
 DiskTypes Disk::type(){
     //std::unordered_map<std::wstring, int> type;
     int type = -1;
-    unsigned int a = GetDriveTypeA(wstrToLPCSTR(name));
+    const std::string driveName = GeneralFunctions::wStringToString(name);
+    unsigned int a = GetDriveTypeA(driveName.c_str());
     //type.insert({it->erase(2), a});
     type = a;
 
@@ -555,4 +543,8 @@ const DiskTypes &Disk::getDiskType() const noexcept{
 
 const std::wstring &Disk::getManufacturerName() const noexcept{
     return manufacturerName;
+}
+
+const int Disk::getDiskNumber() const noexcept{
+    return diskNumber;
 }

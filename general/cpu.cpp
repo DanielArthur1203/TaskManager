@@ -28,7 +28,17 @@ typedef struct _PROCESSOR_POWER_INFORMATION {
     ULONG CurrentIdleState;
 } PROCESSOR_POWER_INFORMATION, *PPROCESSOR_POWER_INFORMATION;
 
-unsigned long long Cpu::fileTimeToULL(const FILETIME &ft){
+void Cpu::initialize(Cpu &cpu){
+    std::call_once(initFlag, [&](){
+        name = cpu.cpuName();
+        cores = cpu.coreCount();
+        cache = cpu.cacheAmounts();
+        processors = cpu.processorCount();
+    });
+}
+
+unsigned long long Cpu::fileTimeToULL(const FILETIME &ft)
+{
     return (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 }
 
@@ -508,7 +518,7 @@ unsigned int Cpu::getProcessors() const noexcept{
 // bool Cpu::virtualizationState(){
 //     bool isEnabled = false;
 //     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-//     if(hres != 0){
+//     if(FAILED(hres)){
 //         throw std::runtime_error("Failed with HRESULT code " + hres);
 //     }
 
@@ -525,7 +535,7 @@ unsigned int Cpu::getProcessors() const noexcept{
 //         CLSCTX_INPROC_SERVER,
 //         IID_IWbemLocator, (void**)&pLoc
 //     );
-//     if (hres != 0 || pLoc == NULL) {
+//     if (FAILED(hres) || pLoc == NULL) {
 //         CoUninitialize();
 //         throw std::runtime_error("Failed with HRESULT code " + hres);
 //     }
@@ -536,7 +546,7 @@ unsigned int Cpu::getProcessors() const noexcept{
 //     hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
 //     SysFreeString(bstrNamespace);
     
-//     if (hres != 0 || pSvc == NULL) {
+//     if (FAILED(hres) || pSvc == NULL) {
 //         pLoc->Release();
 //         CoUninitialize();
 //         throw std::runtime_error("Failed with HRESULT code " + hres);

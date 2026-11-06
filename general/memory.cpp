@@ -35,7 +35,41 @@ typedef struct _PROCESS_MEMORY_COUNTERS_EX2 {
     ULONG64 SharedCommitUsage;
 } PROCESS_MEMORY_COUNTERS_EX2;
 
-unsigned long MemoryInfo::PDHQueryHelper(PDH_HQUERY &q, DWORD_PTR &dwP, LPCSTR path){
+void MemoryInfo::initialize(MemoryInfo& mem){
+    std::call_once(initFlag, [&](){
+        try{
+            name = mem.memoryName();
+            type = mem.getRAMType();
+            usedSlots = mem.getNumUsedRAMSlots();
+            totalSlots = mem.getTotalRAMSlots();
+            speed = mem.getMemorySpeed();
+        }
+        catch(const std::runtime_error& e){
+            std::string msg = e.what();
+            if(msg.contains("Name")){
+                name = L"N/A(Name Retrieval Failed)";
+            }
+            else if(msg.contains("Type")){
+                type = "Unknown(Error Occurred)";
+            }
+            else if(msg.contains("used RAM slots")){
+                usedSlots = "N/A(Error Occurred)";
+            }
+            else if(msg.contains("total RAM slots")){
+                totalSlots = "N/A";
+            }
+            else if(msg.contains("speed")){
+                speed = "N/A";
+            }
+            else{
+                throw std::runtime_error(msg); //Don't know what else to do here
+            }
+        }
+    });
+}
+
+unsigned long MemoryInfo::PDHQueryHelper(PDH_HQUERY &q, DWORD_PTR &dwP, LPCSTR path)
+{
     unsigned long cachedMem = 0;
     PDH_STATUS status = PdhOpenQueryA(NULL, dwP, &q);
     if(status == ERROR_SUCCESS){
@@ -148,46 +182,7 @@ std::wstring MemoryInfo::memoryName(){
 }
 
 MemoryInfo::MemoryInfo(){
-    if(name == L""){
-        try{
-            name = memoryName();
-        }
-        catch(const std::runtime_error& e){
-            name = L"N/A(Name Retrieval Failed)";
-        }
-    }
-    if(type == ""){
-        try{
-            type = getRAMType();
-        }
-        catch(const std::runtime_error& e){
-            type = "Unknown(Error Occurred)";
-        }
-    }
-    if(usedSlots.index() == 0){
-        try{
-            usedSlots = getNumUsedRAMSlots();
-        }
-        catch(const std::runtime_error& e){
-            usedSlots = "N/A(Error Occurred)";
-        }
-    }
-    if(totalSlots.index() == 0){
-        try{
-            totalSlots = getTotalRAMSlots();
-        }
-        catch(const std::runtime_error& e){
-            totalSlots = "N/A";
-        }
-    }
-    if(speed.index() == 0){
-        try{
-            speed = getMemorySpeed();
-        }
-        catch(const std::runtime_error& e){
-            speed = "N/A(Error Occurred)";
-        }
-    }
+    initialize(*this);
 }
 
 double MemoryInfo::getPhysicalMemoryUsage(const DWORD pid){
@@ -330,13 +325,15 @@ unsigned long MemoryInfo::getTotalCachedMemory(){
         "\\Memory\\Standby Cache Normal Priority Bytes"};
     //LPCSTR counterPath = "\\Memory\\Cache Bytes"; //inconsistent 
     std::list<std::future<unsigned long>> results;
-    PDH_HQUERY query;
     DWORD_PTR dwP = 0;
     
     for(LPCSTR& counterPath : paths){
         try{
-            results.push_back(std::async(std::launch::async, [this, query, dwP, counterPath]() mutable{
-                return PDHQueryHelper(query, dwP, counterPath);
+            results.push_back(std::async(std::launch::async, [this, dwP, counterPath]() mutable{
+                PDH_HQUERY query = nullptr;
+                PdhCloseQuery(query);
+                const auto val = PDHQueryHelper(query, dwP, counterPath);
+                return val;
             }));
         }
         catch(const std::runtime_error& e){
@@ -347,7 +344,6 @@ unsigned long MemoryInfo::getTotalCachedMemory(){
     for(auto& result: results){
         cachedMem += result.get();
     }
-    PdhCloseQuery(query);
     return cachedMem;
 }
 
@@ -435,8 +431,8 @@ unsigned long MemoryInfo::getMemorySpeed(){
     unsigned long memorySpeed = 0;
 
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-    if(hres != 0){
-        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
+    if(FAILED(hres)){
+        throw std::runtime_error("Failed to get memory speed");
     }
 
     hres = CoInitializeSecurity(
@@ -452,7 +448,7 @@ unsigned long MemoryInfo::getMemorySpeed(){
         CLSCTX_INPROC_SERVER,
         IID_IWbemLocator, (void**)&pLoc
     );
-    if (hres != 0 || pLoc == NULL) {
+    if (FAILED(hres) || pLoc == NULL) {
         CoUninitialize();
         throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
     }
@@ -463,7 +459,7 @@ unsigned long MemoryInfo::getMemorySpeed(){
     hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
     SysFreeString(bstrNamespace);
     
-    if (hres != 0 || pSvc == NULL) {
+    if (FAILED(hres) || pSvc == NULL) {
         pLoc->Release();
         CoUninitialize();
         throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
@@ -517,15 +513,8 @@ unsigned short MemoryInfo::getNumUsedRAMSlots(){
     unsigned short usedSlots = 0;
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
     if(FAILED(hres)){
-        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
+        throw std::runtime_error("Failed to get number of used RAM slots");
     }
-
-    hres = CoInitializeSecurity(
-        NULL, -1, NULL, NULL,
-        RPC_C_AUTHN_LEVEL_DEFAULT,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        NULL, EOAC_NONE, NULL
-    );
 
     hres = CoInitializeSecurity(
         NULL, -1, NULL, NULL,
@@ -546,7 +535,7 @@ unsigned short MemoryInfo::getNumUsedRAMSlots(){
     hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
     SysFreeString(bstrNamespace);
     
-    if (hres != 0 || pSvc == NULL) {
+    if (FAILED(hres) || pSvc == NULL) {
         pLoc->Release();
         CoUninitialize();
         throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
@@ -584,8 +573,8 @@ unsigned short MemoryInfo::getNumUsedRAMSlots(){
 unsigned short MemoryInfo::getTotalRAMSlots(){
     unsigned short totalSlots = 0;
     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-    if(hres != 0){
-        throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));
+    if(FAILED(hres)){
+        throw std::runtime_error("Failed to get number of total RAM slots");
     }
 
     hres = CoInitializeSecurity(
@@ -607,7 +596,7 @@ unsigned short MemoryInfo::getTotalRAMSlots(){
     hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
     SysFreeString(bstrNamespace);
     
-    if (hres != 0 || pSvc == NULL) {
+    if (FAILED(hres) || pSvc == NULL) {
         pLoc->Release();
         CoUninitialize();
         throw std::runtime_error("Failed with HRESULT code " + std::to_string(hres));

@@ -18,7 +18,7 @@
     <item>
      <widget class="QStackedWidget" name="taskManagerStacked">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="page">
        <layout class="QHBoxLayout" name="horizontalLayout">
@@ -87,8 +87,8 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>120</width>
-          <height>80</height>
+          <width>81</width>
+          <height>821</height>
          </rect>
         </property>
         <property name="frameShape">
@@ -100,16 +100,32 @@
         <widget class="QPushButton" name="swapScreenButton2">
          <property name="geometry">
           <rect>
-           <x>20</x>
+           <x>0</x>
            <y>20</y>
            <width>81</width>
            <height>26</height>
           </rect>
          </property>
          <property name="text">
-          <string>PushButton</string>
+          <string>Processes</string>
          </property>
         </widget>
+       </widget>
+       <widget class="QFrame" name="hardwareButtonFrame">
+        <property name="geometry">
+         <rect>
+          <x>90</x>
+          <y>0</y>
+          <width>141</width>
+          <height>821</height>
+         </rect>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::Shape::NoFrame</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Shadow::Raised</enum>
+        </property>
        </widget>
       </widget>
      </widget>

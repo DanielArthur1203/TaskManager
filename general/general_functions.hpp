@@ -7,49 +7,60 @@
 #include <pdhmsg.h>
 #include <intsafe.h>
 #include <string>
+#include <stdexcept>
 
 namespace GeneralFunctions{
     //Helper to convert wstring to string
-    inline LPCSTR wStringToString(std::wstring &string) noexcept{
-        int size = WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), NULL, 0, NULL, NULL);
-
-        static thread_local std::string str;
-        str.assign(size, '\0');
-
-        if (size > 0) {
-            WideCharToMultiByte(CP_UTF8, 0, string.c_str(), (int)string.length(), str.data(), size, NULL, NULL);
+    inline std::string wStringToString(const std::wstring& string){
+        if (string.empty()) {
+            return {};
         }
 
-        return str.c_str();
+        const int size = WideCharToMultiByte(
+            CP_UTF8, 0, string.data(), static_cast<int>(string.size()),
+            NULL, 0, NULL, NULL);
+        if (size == 0) {
+            throw std::runtime_error("Converting wide string to UTF-8 failed");
+        }
+
+        std::string result(static_cast<std::size_t>(size), '\0');
+        const int converted = WideCharToMultiByte(
+            CP_UTF8, 0, string.data(), static_cast<int>(string.size()),
+            result.data(), size, NULL, NULL);
+        if (converted == 0) {
+            throw std::runtime_error("Converting wide string to UTF-8 failed");
+        }
+
+        result.resize(static_cast<std::size_t>(converted));
+        return result;
     }
 
     //Returns a string message of the last error returned by GetLastError
     inline std::string formattedError(std::string msg) noexcept{
         std::string response = "";
-        DWORD errorNum;
+        const DWORD errorNum = GetLastError();
         int errorNumInt;
-        TCHAR sysMsg[256];
-        TCHAR *p;
+        TCHAR sysMsg[256] = {};
 
-        errorNum = GetLastError( );
-        FormatMessage( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        const DWORD chars = FormatMessage(
+            FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
             NULL, errorNum,
             MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            sysMsg, 256, NULL );
+            sysMsg, static_cast<DWORD>(sizeof(sysMsg) / sizeof(sysMsg[0])), NULL);
 
-        // Trim the end of the line and terminate it with a null
-        p = sysMsg;
-        while( ( *p > 31 ) || ( *p == 9 ) )
-            ++p;
-        do { *p-- = 0; } while( ( p >= sysMsg ) && ( ( *p == '.' ) || ( *p < 33 ) ) );
-        
+        if (chars != 0) {
+            TCHAR* end = sysMsg + chars;
+            while (end > sysMsg &&
+                   (end[-1] == TEXT('.') || end[-1] < 33)) {
+                *--end = TEXT('\0');
+            }
+        }
 
-        if(DWordToInt(errorNum, &errorNumInt) == INTSAFE_E_ARITHMETIC_OVERFLOW){
+        if (DWordToInt(errorNum, &errorNumInt) == INTSAFE_E_ARITHMETIC_OVERFLOW) {
             response = "Failed to generate error code";
         }
-        else{
-            //idk how to get sysMsg in here without some hijinks
-            response += msg + " failed with error number " + std::to_string(errorNumInt);
+        else {
+            response = msg + " failed with error number " + std::to_string(errorNumInt);
         }
 
         return response;
@@ -83,8 +94,15 @@ namespace GeneralFunctions{
         std::string text;
         int len = WideCharToMultiByte(CP_UTF8, 0, pMessage, -1, NULL, 0, NULL, NULL);
         if(len > 0){
-            text.resize(len - 1);
-            WideCharToMultiByte(CP_UTF8, 0, pMessage, -1, &text[0], len, NULL, NULL);
+            text.resize(len);
+            const int converted = WideCharToMultiByte(
+                CP_UTF8, 0, pMessage, -1, text.data(), len, NULL, NULL);
+            if (converted > 0) {
+                text.resize(static_cast<std::size_t>(converted - 1));
+            }
+            else {
+                text.clear();
+            }
         }
 
         LocalFree(pMessage);

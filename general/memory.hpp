@@ -6,18 +6,21 @@
 #include <string>
 #include <variant>
 #include <stdexcept>
+#include <mutex>
 #include <windows.h>
 #include <pdh.h>
 
 class MemoryInfo{
     private:
         Processes processes;
+        inline static std::once_flag initFlag;
         inline static std::wstring name = L"";
         inline static std::string type = "";
         inline static std::variant<std::monostate, unsigned short, std::string> usedSlots;
         inline static std::variant<std::monostate, unsigned short, std::string> totalSlots;
         inline static std::variant<std::monostate, unsigned long, std::string> speed;
 
+        static void initialize(MemoryInfo& mem);
         unsigned long PDHQueryHelper(PDH_HQUERY& q, DWORD_PTR& dwP, LPCSTR path);
         //Returns a wstring containing installed memory name
         std::wstring memoryName();

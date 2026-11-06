@@ -27,7 +27,6 @@ struct ProcessDiskSample{
 class Disk{
     private:
         Processes processes;
-        LPCSTR wstrToLPCSTR(std::wstring& string);
         std::wstring name;
         int diskNumber;
         unsigned int diskCapacity = 0;
@@ -93,6 +92,7 @@ class Disk{
         const int getDiskCapacity() const noexcept;
         const DiskTypes& getDiskType() const noexcept;
         const std::wstring& getManufacturerName() const noexcept;
+        const int getDiskNumber() const noexcept;
 };
 
 #endif
