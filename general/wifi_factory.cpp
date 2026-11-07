@@ -121,7 +121,7 @@ std::vector<unsigned long> WifiFactory::getAdapterIndices(){
 
 std::vector<std::unique_ptr<WiFi>> WifiFactory::makeWiFi(){
     //I do realize that I treat these as noexcept when they're not in all factories
-    //It's just b/c if one is thrown the program becomes FUBAR and I don't see a way other than just crashing to let it continue
+    //It's just b/c if one is thrown the program becomes FUBAR and I don't see a way other than just allowing a crash
     std::vector<std::unique_ptr<WiFi>> wifi;
     auto names = internetAdapterNames();
     auto indicies = getAdapterIndices();

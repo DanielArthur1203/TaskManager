@@ -6,11 +6,11 @@
 #include <QScrollBar>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QDebug>
-#include <algorithm>
+#include <QTextEdit>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 #include <future>
 #include <thread>
-#include <chrono>
-#include <unordered_set>
 #include <objbase.h>
 
 struct Killer{
@@ -136,7 +136,6 @@ void MainWindow::resolveDifferences(std::list<std::string>& names, Processes& p)
 void MainWindow::populateMapHelper(std::string &name, Processes &p){
     if(!name.contains(".exe")){
         //If it doesn't have an exe then getPIDFromName will probably fail in some way
-        //So just putting -1 should be fine
         std::wstring passed(name.begin(), name.end());
         std::vector<DWORD> pids = p.getPIDFromName(passed);
         if(!pids.empty()){
@@ -212,17 +211,21 @@ void MainWindow::addTextBoxesToFrame(){
                 frame->setLayout(layout);
             }
             auto textBoxes = createTextBoxes(frame);
+            int i = 0;
+            //Cpu -> Memory ->Disks-> Wifi -> Gpu
             for(const auto& box: textBoxes){
                 layout->addWidget(box);
+                addPageToHardwareStackedWidget(ui->hardwareStackedWidget, box->objectName());
+                connect(box, &HardwareInfoBox::clicked, this, &MainWindow::hardwareInfoBoxClicked);
+                nameIndexMap.insert({box->objectName(), i});
+                i++;
             }
-            // layout->addWidget(edit);
         }
     }
 }
 
-std::vector<QTextEdit *> MainWindow::createTextBoxes(QFrame* frame){
-    std::vector<QTextEdit *> textEdits;
-    //Do Cpu -> Memory ->Disks(done) -> Wifi -> Gpu
+std::vector<HardwareInfoBox *> MainWindow::createTextBoxes(QFrame* frame){
+    std::vector<HardwareInfoBox *> textEdits;
     auto cpuText = makeTextBox(QString("CPU"), frame);
     textEdits.push_back(cpuText);
 
@@ -238,22 +241,80 @@ std::vector<QTextEdit *> MainWindow::createTextBoxes(QFrame* frame){
     }
 
     //Need to make Ethernet or other stuff say that name eventually
+    int j = 0;
     for(const auto& wifi: hardware->wifi){
-        auto text = makeTextBox(QString("Wifi"), frame);
+        std::string info = "Wifi " + std::to_string(j);
+        auto text = makeTextBox(QString::fromStdString(info), frame);
         textEdits.push_back(text);
+        j++;
     }
 
+    int i = 0;
     for(const auto& gpu: hardware->gpus){
-        auto text = makeTextBox(QString("GPU"), frame);
+        std::string a = "GPU " + std::to_string(i);
+        auto text = makeTextBox(QString::fromStdString(a), frame);
         textEdits.push_back(text);
+        i++;
     }
     return textEdits;
 }
 
-QTextEdit *MainWindow::makeTextBox(const QString &s, QFrame* frame){
-    auto text = new QTextEdit(frame);
+HardwareInfoBox *MainWindow::makeTextBox(const QString &s, QFrame* frame){
+    auto text = new HardwareInfoBox(frame, s);
+    return text;
+}
+
+void MainWindow::addPageToHardwareStackedWidget(QStackedWidget *widget, const QString& s){
+    QWidget* page = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(page);
+    auto text = new QTextEdit();
+    text->setText(handleTextDeduction(s));
     text->setReadOnly(true);
-    text->setText(s);
+    text->setFrameStyle(QFrame::NoFrame);
+    layout->addWidget(text);
+    page->setLayout(layout);
+    widget->addWidget(page);
+}
+
+QString MainWindow::handleTextDeduction(const QString &s){
+    QString text("");
+    //IDK how to force the names to the far right
+    if(s.contains("CPU")){
+        std::string a = "CPU\t\t\t" + hardware->cpu.getName();
+        text = QString::fromStdString(a);
+    }
+    else if(s.contains("Memory")){
+        std::wstring a = L"Memory\t\t\t" + hardware->memory.getName();
+        text = QString::fromStdWString(a);
+    }
+    else if(s.contains("Disk")){
+        QRegularExpression ex("Disk\\s+(\\d+)");
+        QRegularExpressionMatch match = ex.match(s);
+
+        if(match.hasMatch()){
+            QString cap = match.captured(1);
+            int index = cap.toInt();
+            std::wstring a = s.toStdWString() + L"\t\t\t" + hardware->disks.at(index)->getManufacturerName();
+            text = QString::fromStdWString(a);
+        }
+    }
+    else if(s.contains("Wifi")){
+        QStringList list = s.split(u' ', Qt::SkipEmptyParts);
+        QString a = list.back();
+        int index = a.toInt();
+
+        std::wstring info = s.toStdWString() + L"\t\t\t" + hardware->wifi.at(index)->getAdapterName();
+        text = QString::fromStdWString(info);
+    }
+    else{ //Can only be GPU left
+        QStringList list = s.split(u' ', Qt::SkipEmptyParts);
+        QString a = list.back();
+        int index = a.toInt();
+
+        std::wstring info = s.toStdWString() + L"\t\t\t" + hardware->gpus.at(index)->getName();
+        text = QString::fromStdWString(info);
+    }
+
     return text;
 }
 
@@ -268,9 +329,11 @@ void MainWindow::refreshProcesses(){
     }
     catch(const std::runtime_error& e){
         QMessageBox::critical(this, "Error", e.what());
+        QApplication::quit();
     }
     catch(const std::exception& e){
         QMessageBox::critical(this, "Unexpected Error", e.what());
+        QApplication::quit();
     }
 
     try{
@@ -283,6 +346,7 @@ void MainWindow::refreshProcesses(){
     }
     catch(const std::exception& e){
         QMessageBox::critical(this, "Error:", e.what());
+        QApplication::quit();
     }
     
     if(!map.empty()){
@@ -301,6 +365,7 @@ void MainWindow::refreshProcesses(){
                 }
                 catch(...){
                     QMessageBox::critical(this, "Unkown Error:", "Unexpected Error Occurred During Display Name Retrieval");
+                    QApplication::quit();
                 }
                 
                 if(a.contains("PPL")){
@@ -352,6 +417,7 @@ void MainWindow::refreshProcesses(){
         }
         catch(const std::runtime_error& e){
             QMessageBox::critical(this, "Error:", e.what());
+            QApplication::quit();
         }
     }
 }
@@ -373,4 +439,20 @@ void MainWindow::on_swapScreenButton1_clicked(){
 
 void MainWindow::on_swapScreenButton2_clicked(){
     ui->taskManagerStacked->setCurrentWidget(ui->page);
+}
+
+void MainWindow::hardwareInfoBoxClicked(QString &s){
+    int currentPage = ui->hardwareStackedWidget->currentIndex();
+
+    auto pair = nameIndexMap.find(s);
+    if(pair == nameIndexMap.end()){
+        QMessageBox::critical(this, "Error", "Unexpected Logic Error"); //Should never happen so idk how to describe it
+        QApplication::quit();
+    }
+    
+    int indexToGo = pair->second;
+
+    if(indexToGo != currentPage){ //if the stacked widget is already on that page do nothing
+        ui->hardwareStackedWidget->setCurrentIndex(indexToGo);
+    }
 }

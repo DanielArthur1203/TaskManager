@@ -157,9 +157,14 @@ std::wstring MemoryInfo::memoryName(){
 
     IWbemClassObject* pclsObj = NULL;
     ULONG uReturn = 0;
-    while (pEnumerator) {
+    if(pEnumerator) {
         hres = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
-        if (uReturn == 0) break;
+        if (uReturn == 0){
+            pSvc->Release();
+            pEnumerator->Release();
+            CoUninitialize();
+            return name;
+        };
 
         VARIANT vtProp;
         

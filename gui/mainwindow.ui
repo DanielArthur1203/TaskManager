@@ -116,7 +116,7 @@
          <rect>
           <x>90</x>
           <y>0</y>
-          <width>141</width>
+          <width>101</width>
           <height>821</height>
          </rect>
         </property>
@@ -125,6 +125,16 @@
         </property>
         <property name="frameShadow">
          <enum>QFrame::Shadow::Raised</enum>
+        </property>
+       </widget>
+       <widget class="QStackedWidget" name="hardwareStackedWidget">
+        <property name="geometry">
+         <rect>
+          <x>199</x>
+          <y>9</y>
+          <width>871</width>
+          <height>821</height>
+         </rect>
         </property>
        </widget>
       </widget>

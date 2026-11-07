@@ -1,22 +1,23 @@
 #pragma once
 
 #include "usagestats.hpp"
+#include "hardware_infobox.hpp"
 #include "../general/memory.hpp"
 #include "../general/disk_factory.hpp"
 #include "../general/wifi_factory.hpp"
 #include "../general/gpu_factory.hpp"
 #include <../general/cpu.hpp>
 #include <QMainWindow>
-#include <QTextEdit>
 #include <QTimer>
 #include <QFutureWatcher>
 #include <QString>
+#include <QStackedWidget>
 #include <list>
 #include <string>
 #include <vector>
 #include <map>
 #include <memory>
-#include <algorithm>
+#include <unordered_map>
 #include <cctype>
 
 QT_BEGIN_NAMESPACE
@@ -69,6 +70,7 @@ class MainWindow : public QMainWindow{
         QFutureWatcher<HardwareInitResult>* hardwareWatcher = nullptr;
         std::shared_ptr<Hardware> hardware;
         std::map<std::string, UsageStats, Comparison> map;
+        std::unordered_map<QString, int> nameIndexMap;
         //Gets what's new
         std::vector<std::string> getDifferences1(std::list<std::string>& names);
         //Gets what is old and should be deleted
@@ -78,12 +80,15 @@ class MainWindow : public QMainWindow{
         void populateMap(std::list<std::string>& names, Processes& p);
         std::wstring displayNameRetrieval(DWORD pid, Processes& p);
         void addTextBoxesToFrame();
-        std::vector<QTextEdit*> createTextBoxes(QFrame* frame);
-        QTextEdit* makeTextBox(const QString& s, QFrame* frame);
+        std::vector<HardwareInfoBox*> createTextBoxes(QFrame* frame);
+        HardwareInfoBox* makeTextBox(const QString& s, QFrame* frame);
+        void addPageToHardwareStackedWidget(QStackedWidget* widget, const QString& s);
+        QString handleTextDeduction(const QString& s);
     private slots:
         void refreshProcesses();
         void scrollStopped();
         void handleScroll();
         void on_swapScreenButton1_clicked();
         void on_swapScreenButton2_clicked();
+        void hardwareInfoBoxClicked(QString& s);
 };

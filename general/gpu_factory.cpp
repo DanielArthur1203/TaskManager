@@ -122,11 +122,11 @@ std::vector<std::wstring> GpuFactory::gpuNames(){
 
         VARIANT vtProp;
 
-        pclsObj->Get(L"AdapterCompatibility", 0, &vtProp, 0, 0);
-        fullName += (vtProp.bstrVal ? vtProp.bstrVal : L"Unknown Manufacturer");
-        VariantClear(&vtProp);
+        // pclsObj->Get(L"AdapterCompatibility", 0, &vtProp, 0, 0);
+        // fullName += (vtProp.bstrVal ? vtProp.bstrVal : L"Unknown Manufacturer");
+        // VariantClear(&vtProp);
 
-        fullName += L" ";
+        // fullName += L" ";
 
         pclsObj->Get(L"Name", 0, &vtProp, 0, 0);
         fullName  += (vtProp.bstrVal ? vtProp.bstrVal : L"Unknown Name");
