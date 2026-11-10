@@ -202,40 +202,6 @@ bool Cpu::sampleUtilization(double &usage){
     return true;
 }
 
-double Cpu::currentUsage(){
-    FILETIME idle, kernel, user;
-
-    if(!GetSystemTimes(&idle, &kernel, &user)){
-        std::string errorMsg = GeneralFunctions::formattedError("Getting System Times");
-        throw std::runtime_error(errorMsg);
-    }
-    std::this_thread::sleep_for(seconds(1));
-
-    FILETIME idle2, kernel2, user2;
-
-    if(!GetSystemTimes(&idle2, &kernel2, &user2)){
-        std::string errorMsg = GeneralFunctions::formattedError("Getting System Times");
-        throw std::runtime_error(errorMsg);
-    }
-
-    auto i1 = fileTimeToULL(idle);
-    auto k1 = fileTimeToULL(kernel);
-    auto u1 = fileTimeToULL(user);
-
-    auto i2 = fileTimeToULL(idle2);
-    auto k2 = fileTimeToULL(kernel2);
-    auto u2 = fileTimeToULL(user2);
-
-    auto iD = i2 - i1;
-    auto kD = k2 - k1;
-    auto uD = u2 - u1;
-
-    auto totalSysTime = kD + uD;
-
-    auto returnUsage = std::floor(static_cast<double>(totalSysTime - iD) * 100.0 / totalSysTime);
-    return returnUsage;
-}
-
 void Cpu::processNameTotalUsage(std::vector<DWORD>& pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
     bool hasAny = false;
     double total = 0;

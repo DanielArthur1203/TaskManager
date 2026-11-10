@@ -58,9 +58,7 @@ class Cpu{
             processes = Processes();
             initialize(*this);
         };
-
-        //Returns percent CPU usage
-        double currentUsage();
+        
         //Returns the CPU usage of all processes that have the same exe name as the given PID
         void processNameTotalUsage(std::vector<DWORD>& pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
         void utilization(double& usage, std::exception_ptr& ptr);

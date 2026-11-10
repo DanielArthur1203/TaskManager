@@ -3,14 +3,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 #include <variant>
-
 Cpu a;
-
-TEST(Cpu, currentUsage){
-    EXPECT_NO_THROW(a.currentUsage());
-    ASSERT_TRUE(a.currentUsage() >= 0);
-    EXPECT_TRUE(a.currentUsage() > 0);
-}
 
 TEST(Cpu, cpuClockSpeed){
     EXPECT_NO_THROW(a.cpuClockSpeed());
