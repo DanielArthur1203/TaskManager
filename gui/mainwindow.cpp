@@ -9,6 +9,10 @@
 #include <QTextEdit>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
+#include <QTextCursor>
+#include <QTextTable>
+#include <QTextTableFormat>
+#include <QTextCharFormat>
 #include <future>
 #include <thread>
 #include <objbase.h>
@@ -267,25 +271,73 @@ HardwareInfoBox *MainWindow::makeTextBox(const QString &s, QFrame* frame){
 void MainWindow::addPageToHardwareStackedWidget(QStackedWidget *widget, const QString& s){
     QWidget* page = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0); 
+    layout->setSpacing(0);
+    auto strings = handleTextDeduction(s);
     auto text = new QTextEdit();
-    text->setText(handleTextDeduction(s));
-    text->setReadOnly(true);
-    text->setFrameStyle(QFrame::NoFrame);
-    layout->addWidget(text);
+
+    QTextCursor cursor(text->textCursor());
+    cursor.movePosition(QTextCursor::End);
+
+    QTableWidget* tableWidget = new QTableWidget(1, 2, text);
+    tableWidget->setFrameShape(QFrame::NoFrame);
+    tableWidget->setShowGrid(false);
+    tableWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tableWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    
+    tableWidget->horizontalHeader()->setVisible(false);
+    tableWidget->verticalHeader()->setVisible(false);
+    tableWidget->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    tableWidget->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    tableWidget->setSelectionMode(QAbstractItemView::NoSelection);
+    tableWidget->setFocusPolicy(Qt::NoFocus);
+    tableWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); 
+
+
+    QTableWidgetItem* leftItem = new QTableWidgetItem(strings[0]);
+    leftItem->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    tableWidget->setItem(0, 0, leftItem);
+
+    QTableWidgetItem* rightItem = new QTableWidgetItem(strings[1]);
+    rightItem->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    tableWidget->setItem(0, 1, rightItem);
+
+    int contentWidth = text->viewport()->width() - (text->document()->documentMargin() * 2);
+    tableWidget->setFixedWidth(contentWidth);
+    tableWidget->setFixedHeight(tableWidget->rowHeight(0));
+
+    tableWidget->setParent(text->viewport());
+    tableWidget->show();
+
+    QTextBlockFormat blockFormat;
+    blockFormat.setBottomMargin(tableWidget->height());
+    cursor.setBlockFormat(blockFormat);
+    
+    QRect rect = text->cursorRect(cursor);
+    tableWidget->move(text->document()->documentMargin(), rect.top());
+
+    cursor.insertBlock();
+    layout->addWidget(tableWidget);
+    QSpacerItem* verticalSpacer = new QSpacerItem(20, 40, QSizePolicy::Minimum, QSizePolicy::Expanding);
+    layout->addSpacerItem(verticalSpacer);
     page->setLayout(layout);
     widget->addWidget(page);
 }
 
-QString MainWindow::handleTextDeduction(const QString &s){
-    QString text("");
-    //IDK how to force the names to the far right
+std::array<QString, 2> MainWindow::handleTextDeduction(const QString &s){
+    std::array<QString, 2> strings;
     if(s.contains("CPU")){
-        std::string a = "CPU\t\t\t" + hardware->cpu.getName();
-        text = QString::fromStdString(a);
+        std::string left = "CPU";
+        std::string right = hardware->cpu.getName();
+        strings[0] = QString::fromStdString(left);
+        strings[1] = QString::fromStdString(right);
     }
     else if(s.contains("Memory")){
-        std::wstring a = L"Memory\t\t\t" + hardware->memory.getName();
-        text = QString::fromStdWString(a);
+        std::wstring left = L"Memory\t\t\t";
+        std::wstring right = hardware->memory.getName();
+        strings[0] = QString::fromStdWString(left);
+        strings[1] = QString::fromStdWString(right);
     }
     else if(s.contains("Disk")){
         QRegularExpression ex("Disk\\s+(\\d+)");
@@ -294,8 +346,10 @@ QString MainWindow::handleTextDeduction(const QString &s){
         if(match.hasMatch()){
             QString cap = match.captured(1);
             int index = cap.toInt();
-            std::wstring a = s.toStdWString() + L"\t\t\t" + hardware->disks.at(index)->getManufacturerName();
-            text = QString::fromStdWString(a);
+            std::wstring left = s.toStdWString();
+            std::wstring right = hardware->disks.at(index)->getManufacturerName();
+            strings[0] = QString::fromStdWString(left);
+            strings[1] = QString::fromStdWString(right);
         }
     }
     else if(s.contains("Wifi")){
@@ -303,19 +357,23 @@ QString MainWindow::handleTextDeduction(const QString &s){
         QString a = list.back();
         int index = a.toInt();
 
-        std::wstring info = s.toStdWString() + L"\t\t\t" + hardware->wifi.at(index)->getAdapterName();
-        text = QString::fromStdWString(info);
+        std::wstring left = s.toStdWString();
+        std::wstring right = hardware->wifi.at(index)->getAdapterName();
+        strings[0] = QString::fromStdWString(left);
+        strings[1] = QString::fromStdWString(right);
     }
     else{ //Can only be GPU left
         QStringList list = s.split(u' ', Qt::SkipEmptyParts);
         QString a = list.back();
         int index = a.toInt();
 
-        std::wstring info = s.toStdWString() + L"\t\t\t" + hardware->gpus.at(index)->getName();
-        text = QString::fromStdWString(info);
+        std::wstring left = s.toStdWString();
+        std::wstring right = hardware->gpus.at(index)->getName();
+        strings[0] = QString::fromStdWString(left);
+        strings[1] = QString::fromStdWString(right);
     }
 
-    return text;
+    return strings;
 }
 
 void MainWindow::refreshProcesses(){

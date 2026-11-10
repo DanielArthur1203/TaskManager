@@ -3,13 +3,13 @@
 
 #include "processes.hpp"
 #include <windows.h>
-#include <vector>
 #include <string>
 #include <array>
 #include <variant>
 #include <stdexcept>
 #include <unordered_map>
 #include <mutex>
+#include <memory>
 
 struct ProcessCpuSample{
     unsigned long long totalCpuTime;
@@ -17,10 +17,17 @@ struct ProcessCpuSample{
     ULONGLONG sampledAtMs;
 };
 
+struct CpuUsageSample{
+    unsigned long long totalUsageTime;
+    unsigned long long idleTime;
+    ULONGLONG sampleAtMs;
+};
+
 class Cpu{
     private:
         Processes processes;
         std::unordered_map<DWORD, ProcessCpuSample> previousSamples;
+        std::unique_ptr<CpuUsageSample> pastSample;
         inline static std::once_flag initFlag;
         inline static std::string name = "";
         inline static unsigned short cores = -1;
@@ -38,6 +45,8 @@ class Cpu{
         ProcessCpuSample getSnap(DWORD pid);
         bool sampleProcessUsage(DWORD pid, double& usage);
         std::string cpuName() noexcept;
+        CpuUsageSample utilizationSnap();
+        bool sampleUtilization(double& usage);
         //Returns # of CPU cores
         unsigned short coreCount();
         //Returns an array holding the sizes of L1, L2, L3 caches
@@ -52,11 +61,9 @@ class Cpu{
 
         //Returns percent CPU usage
         double currentUsage();
-        //Returns the CPU usage of a individual process
-        double processUsage(DWORD pid);
         //Returns the CPU usage of all processes that have the same exe name as the given PID
         void processNameTotalUsage(std::vector<DWORD>& pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr);
-        void processNameTotalUsage(DWORD pid, std::variant<double, std::string>& usage);
+        void utilization(double& usage, std::exception_ptr& ptr);
         //Returns CPU clock speed in GHz by multiplying the usage ratio by the base speed
         double cpuClockSpeed();
         //Returns the number of CPU threads 
@@ -71,8 +78,7 @@ class Cpu{
         unsigned short getCores() const noexcept;
         const std::array<double, 3> getCache() const noexcept;
         unsigned int getProcessors() const noexcept;
-        //Inclined to believe that this works but since I have HyperV on it will always return false
-        //bool virtualizationState();
+        bool virtualizationState();
 };
 
 #endif

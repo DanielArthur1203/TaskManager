@@ -19,6 +19,7 @@
 #include <memory>
 #include <unordered_map>
 #include <cctype>
+#include <array>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -83,7 +84,7 @@ class MainWindow : public QMainWindow{
         std::vector<HardwareInfoBox*> createTextBoxes(QFrame* frame);
         HardwareInfoBox* makeTextBox(const QString& s, QFrame* frame);
         void addPageToHardwareStackedWidget(QStackedWidget* widget, const QString& s);
-        QString handleTextDeduction(const QString& s);
+        std::array<QString, 2> handleTextDeduction(const QString& s);
     private slots:
         void refreshProcesses();
         void scrollStopped();

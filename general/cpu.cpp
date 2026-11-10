@@ -16,6 +16,7 @@
 #include <list>
 #include <intrin.h>
 #include <cstring>
+#include <algorithm>
 
 using namespace std::chrono;
 
@@ -158,6 +159,49 @@ std::string Cpu::cpuName() noexcept{
     return name;
 }
 
+CpuUsageSample Cpu::utilizationSnap(){
+    CpuUsageSample sample;
+    FILETIME idle, kernel, user;
+
+    if(!GetSystemTimes(&idle, &kernel, &user)){
+        std::string errorMsg = GeneralFunctions::formattedError("Getting System Times");
+        throw std::runtime_error(errorMsg);
+    }
+
+    sample.totalUsageTime = fileTimeToULL(kernel) + fileTimeToULL(user);
+    sample.idleTime = fileTimeToULL(idle);
+    sample.sampleAtMs = GetTickCount64();
+    return sample;
+}
+
+bool Cpu::sampleUtilization(double &usage){
+    const CpuUsageSample current = utilizationSnap();
+    if(!pastSample){
+        pastSample = std::make_unique<CpuUsageSample>(current);
+        return false;
+    }
+
+    const CpuUsageSample previous = *pastSample;
+    *pastSample = current;
+
+    const auto elapsedMs = current.sampleAtMs - previous.sampleAtMs;
+    if(elapsedMs == 0 || current.totalUsageTime < previous.totalUsageTime 
+        || current.idleTime < previous.idleTime){
+        return false;
+    }
+
+    const auto totalDelta = current.totalUsageTime - previous.totalUsageTime;
+    const auto idleDelta = current.idleTime - previous.idleTime;
+    if(totalDelta == 0 || idleDelta > totalDelta){
+        return false;
+    }
+
+    usage = static_cast<double>(totalDelta - idleDelta) / 
+        static_cast<double>(totalDelta) * 100.0;
+    usage = std::round(usage * 100.0) / 100.0;
+    return true;
+}
+
 double Cpu::currentUsage(){
     FILETIME idle, kernel, user;
 
@@ -192,44 +236,6 @@ double Cpu::currentUsage(){
     return returnUsage;
 }
 
-double Cpu::processUsage(DWORD pid){
-    double usage = 3;
-    
-    // unsigned long long snap1 = 0;
-
-    // try{
-    //     snap1 = getSnap(pid);
-    // }
-    // catch(std::runtime_error& e){
-    //     throw std::runtime_error(e.what());
-    // }
-
-    // ULONGLONG time1 = GetTickCount64();
-
-    // std::this_thread::sleep_for(seconds(1));
-
-    // unsigned long long snap2 = 0;
-
-    // try{
-    //     snap2 = getSnap(pid);
-    // }
-    // catch(std::runtime_error& e){
-    //     throw std::runtime_error(e.what());
-    // }
-
-    // ULONGLONG time2 = GetTickCount64();
-
-    // ULONGLONG tDelta = time2 - time1;
-
-    // auto snapDelta = snap2 - snap1;
-
-    // usage = static_cast<double>((snapDelta / (tDelta * 10000.0)));
-    // usage /= processorCount();
-    // usage *= 100;
-    // usage = std::round(usage * 100) / 100;
-    return usage;
-}
-
 void Cpu::processNameTotalUsage(std::vector<DWORD>& pids, std::variant<double, std::string>& usage, std::exception_ptr& ptr){
     bool hasAny = false;
     double total = 0;
@@ -257,46 +263,25 @@ void Cpu::processNameTotalUsage(std::vector<DWORD>& pids, std::variant<double, s
    }
 }
 
-void Cpu::processNameTotalUsage(DWORD pid, std::variant<double, std::string> &usage){
-    std::wstring singleName = processes.getNameFromPID(pid);
-    std::vector<DWORD> allPIDS = processes.getPIDFromName(singleName);
-    std::list<std::future<double>> results;
-
-    for(auto it = allPIDS.begin(); it != allPIDS.end(); ++it){
-        try{
-            DWORD id = *it;
-            results.push_back(std::async(std::launch::async, [this, id](){
-                return processUsage(id);
-            }));
-        } 
-        catch(std::runtime_error& e){
-            std::string msg = e.what();
-            if(msg.contains("5")){
-                continue;
+void Cpu::utilization(double &usage, std::exception_ptr &ptr){
+    bool hasAny = false;
+    try{
+        bool res = sampleUtilization(usage);
+        if(!res){ //first is guaranteed to be false so call again
+            if(sampleUtilization(usage)){
+                hasAny = true; //usage was set properly 
             }
-            //ptr = std::current_exception();
-            throw std::runtime_error(msg);
         }
     }
-    bool setDouble = false;
-    for(auto it = results.begin(); it != results.end(); ++it){
-        if(auto type = std::get_if<double>(&usage)){
-            *type += it->get();
-        }
-        else{
-            if(!setDouble){
-                usage = 0.0;
-                setDouble = true;
-            }
-            std::get<double>(usage) += it->get(); //idk it's increasing erroneously 
-        }
-        //usage += it->get();
+    catch(const std::exception& e){
+        ptr = std::current_exception();
     }
-    if(auto type = std::get_if<double>(&usage)){
-        *type = std::round(*type * 10) / 10;
+    catch(...){
+        ptr = std::current_exception();
     }
-    //usage = std::round(usage * 10) / 10;
-    //return usage;
+    if(!hasAny){
+        usage = -1; //Might change usage to a variant later idk
+    }
 }
 
 double Cpu::cpuClockSpeed(){
@@ -515,84 +500,84 @@ unsigned int Cpu::getProcessors() const noexcept{
     return processors;
 }
 
-// bool Cpu::virtualizationState(){
-//     bool isEnabled = false;
-//     HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-//     if(FAILED(hres)){
-//         throw std::runtime_error("Failed with HRESULT code " + hres);
-//     }
+bool Cpu::virtualizationState(){
+    bool isEnabled = false;
+    HRESULT hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if(FAILED(hres)){
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
 
-//     hres = CoInitializeSecurity(
-//         NULL, -1, NULL, NULL,
-//         RPC_C_AUTHN_LEVEL_DEFAULT,
-//         RPC_C_IMP_LEVEL_IMPERSONATE,
-//         NULL, EOAC_NONE, NULL
-//     );
+    hres = CoInitializeSecurity(
+        NULL, -1, NULL, NULL,
+        RPC_C_AUTHN_LEVEL_DEFAULT,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL, EOAC_NONE, NULL
+    );
 
-//     IWbemLocator* pLoc = NULL;
-//     hres = CoCreateInstance(
-//         CLSID_WbemLocator, NULL,
-//         CLSCTX_INPROC_SERVER,
-//         IID_IWbemLocator, (void**)&pLoc
-//     );
-//     if (FAILED(hres) || pLoc == NULL) {
-//         CoUninitialize();
-//         throw std::runtime_error("Failed with HRESULT code " + hres);
-//     }
+    IWbemLocator* pLoc = NULL;
+    hres = CoCreateInstance(
+        CLSID_WbemLocator, NULL,
+        CLSCTX_INPROC_SERVER,
+        IID_IWbemLocator, (void**)&pLoc
+    );
+    if (FAILED(hres) || pLoc == NULL) {
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
 
-//     // Use SysAllocString instead of _bstr_t for MinGW compatibility
-//     BSTR bstrNamespace = SysAllocString(L"ROOT\\CIMV2");
-//     IWbemServices* pSvc = NULL;
-//     hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
-//     SysFreeString(bstrNamespace);
+    // Use SysAllocString instead of _bstr_t for MinGW compatibility
+    BSTR bstrNamespace = SysAllocString(L"ROOT\\CIMV2");
+    IWbemServices* pSvc = NULL;
+    hres = pLoc->ConnectServer(bstrNamespace, NULL, NULL, 0, WBEM_FLAG_CONNECT_USE_MAX_WAIT, 0, 0, &pSvc);
+    SysFreeString(bstrNamespace);
     
-//     if (FAILED(hres) || pSvc == NULL) {
-//         pLoc->Release();
-//         CoUninitialize();
-//         throw std::runtime_error("Failed with HRESULT code " + hres);
-//     }
+    if (FAILED(hres) || pSvc == NULL) {
+        pLoc->Release();
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
 
-//     BSTR bstrLanguage = SysAllocString(L"WQL");
-//     BSTR bstrQuery = SysAllocString(L"SELECT VirtualizationFirmwareEnabled FROM Win32_Processor");
-//     IEnumWbemClassObject* pEnumerator = NULL;
-//     hres = pSvc->ExecQuery(bstrLanguage, bstrQuery, 
-//         WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
-//     SysFreeString(bstrLanguage);
-//     SysFreeString(bstrQuery);
+    BSTR bstrLanguage = SysAllocString(L"WQL");
+    BSTR bstrQuery = SysAllocString(L"SELECT VirtualizationFirmwareEnabled FROM Win32_Processor");
+    IEnumWbemClassObject* pEnumerator = NULL;
+    hres = pSvc->ExecQuery(bstrLanguage, bstrQuery, 
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+    SysFreeString(bstrLanguage);
+    SysFreeString(bstrQuery);
 
-//     if (SUCCEEDED(hres) && pEnumerator != NULL) {
-//         IWbemClassObject* pclsObj = NULL;
-//         ULONG uReturn = 0;
+    if (SUCCEEDED(hres) && pEnumerator != NULL) {
+        IWbemClassObject* pclsObj = NULL;
+        ULONG uReturn = 0;
         
-//         if (SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn))) {
-//             VARIANT vtProp;
-//             VariantInit(&vtProp);
-//             if (SUCCEEDED(pclsObj->Get(L"VirtualizationFirmwareEnabled", 0, &vtProp, NULL, NULL))) {
-//                 if (vtProp.vt == VT_BOOL) {
-//                     isEnabled = (vtProp.boolVal != VARIANT_FALSE);
-//                 }
-//                 VariantClear(&vtProp);
-//             }
-//             pclsObj->Release();
-//         }
-//         else{
-//             pEnumerator->Release();
-//             pSvc->Release();
-//             pLoc->Release();
-//             CoUninitialize();
-//             throw std::runtime_error("Failed with HRESULT code " + hres);
-//         }
-//         pEnumerator->Release();
-//     }else{
-//         pSvc->Release();
-//         pLoc->Release();
-//         CoUninitialize();
-//         throw std::runtime_error("Failed with HRESULT code " + hres);
-//     }
+        if (SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn))) {
+            VARIANT vtProp;
+            VariantInit(&vtProp);
+            if (SUCCEEDED(pclsObj->Get(L"VirtualizationFirmwareEnabled", 0, &vtProp, NULL, NULL))) {
+                if (vtProp.vt == VT_BOOL) {
+                    isEnabled = (vtProp.boolVal != VARIANT_FALSE);
+                }
+                VariantClear(&vtProp);
+            }
+            pclsObj->Release();
+        }
+        else{
+            pEnumerator->Release();
+            pSvc->Release();
+            pLoc->Release();
+            CoUninitialize();
+            throw std::runtime_error("Failed with HRESULT code " + hres);
+        }
+        pEnumerator->Release();
+    }else{
+        pSvc->Release();
+        pLoc->Release();
+        CoUninitialize();
+        throw std::runtime_error("Failed with HRESULT code " + hres);
+    }
 
-//     pSvc->Release();
-//     pLoc->Release();
-//     CoUninitialize();
+    pSvc->Release();
+    pLoc->Release();
+    CoUninitialize();
 
-//     return isEnabled;
-// }
+    return isEnabled;
+}

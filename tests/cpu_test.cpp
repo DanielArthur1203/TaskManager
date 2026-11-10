@@ -12,25 +12,6 @@ TEST(Cpu, currentUsage){
     EXPECT_TRUE(a.currentUsage() > 0);
 }
 
-TEST(Cpu, processUsage){
-    Processes b;
-    std::wstring bad = L"Code.exe";
-    std::vector<DWORD> pids = b.getPIDFromName(bad);
-    
-    EXPECT_NO_THROW(a.processUsage(pids.at(0)));
-    EXPECT_TRUE(a.processUsage(pids.at(0)) >= 0);
-}
-
-TEST(Cpu, processNameTotalUsage){
-    Processes b;
-    std::wstring bad = L"Code.exe";
-    std::vector<DWORD> pids = b.getPIDFromName(bad);
-    std::variant<double, std::string> temp;
-
-    EXPECT_NO_THROW(a.processNameTotalUsage(pids.at(0), temp));
-    EXPECT_TRUE(std::get<double>(temp) > 0);
-}
-
 TEST(Cpu, cpuClockSpeed){
     EXPECT_NO_THROW(a.cpuClockSpeed());
     EXPECT_TRUE(a.cpuClockSpeed() > 0);
@@ -51,6 +32,7 @@ TEST(Cpu, upTime){
     EXPECT_NE(a.upTime(), "");
 }
 
-// TEST(Cpu, virtualizationState){
-//     EXPECT_NO_FATAL_FAILURE(a.virtualizationState());
-// }
+TEST(Cpu, virtualizationState){
+    bool ans = a.virtualizationState();
+    EXPECT_TRUE(ans == true);
+}
